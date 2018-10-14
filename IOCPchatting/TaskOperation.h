@@ -8,14 +8,14 @@
 #include <list>
 #include <utility>
 #include <vector>
-
+#include "NetWorkStruct.h"
 
 #ifndef TaskOperation_H
 #define TaskOperation_H
 class IOCPServer;
 
 #include "IOCPServer.h"
-#define USERID_LEN			16
+
 
 #define C_CONNECT			9
 #define C_CLOSE				11
@@ -51,12 +51,6 @@ struct mROOM {
 	std::list<mUSER*> userList;
 
 };
-struct Packet_Header {
-	WORD totalLen;
-	WORD protocol;
-	char		 id[USERID_LEN];
-};
-
 
 
 
@@ -73,9 +67,6 @@ private:
 	std::deque<PACKET_DATA*> messageBuf;
 	std::mutex mutex_messageBuf;
 	std::condition_variable cv_messageBuf;
-
-
-
 
 	std::map<_int64, PACKET_DATA*> packetBuffer;
 	std::map<std::string, mUSER*> userList;

@@ -115,46 +115,48 @@ UINT WINAPI IOCPServer::work() {
 	ULONG  isNonBlocking = 1;
 
 	while (true) {
+		// 입출력 이벤트 대기
 		GetQueuedCompletionStatus(cp, &bytesTransferred, (LPDWORD)&perHandleData, (LPOVERLAPPED*)&perIoData, INFINITE);
 
 
-		if ((perIoData->rwMode & READ) == READ) {
+		if (perIoData->rwMode == READ) {
 			data = nullptr;
-			//non-blocking IO 설정
-			if (ioctlsocket(perHandleData->hClntSock, FIONBIO, &isNonBlocking) == 0) {
 
-			}
+			//non-blocking IO 설정
+			if (ioctlsocket(perHandleData->hClntSock, FIONBIO, &isNonBlocking) == 0) {}
+
 
 			char* buffer = new char[BUFSIZE];
 			int len;
-			bool isError = false;
 
+
+			//비동기로 데이터를 수신한다.
 			while (true) {
-				try {
-					len = recv(perHandleData->hClntSock, buffer, BUFSIZE, 0);
-					if (len <= 0) {
-						break;
-					}
-					else {
-						char* tempBuf = data;
-						data = new char[dataLen + len];
-						memcpy(data, tempBuf, dataLen);
-						memcpy(&data[dataLen], buffer, len);
+				
+				len = recv(perHandleData->hClntSock, buffer, BUFSIZE, 0);
 
-						dataLen += len;
+				if (len <= 0) { // 전송끝
+					break;
+				}
+				else {
+					// 이전 데이터와 합친다.
+					char* tempBuf = data;
+					data = new char[dataLen + len];
+					memcpy(data, tempBuf, dataLen);
+					memcpy(&data[dataLen], buffer, len);
 
-						delete tempBuf;
-					}
-				}
-				catch (std::exception) {
-					isError = true;
-				}
+					dataLen += len;
+
+					delete tempBuf;
+				}			
 			}
 
+			//수신 버퍼 초기화
 			delete buffer;
 
-
+			//데이터 길이가 0이상이면 데이터 수신 성공 
 			if (dataLen>0) {
+				//패킷데이터 
 				PACKET_DATA* packet = new PACKET_DATA;
 				DATA_INFO* data_info = new DATA_INFO;
 				packet->data = data_info;
@@ -166,24 +168,28 @@ UINT WINAPI IOCPServer::work() {
 				packet->data->reference_count = 1;
 				packet->dataLen = dataLen;
 
+				//패킷 처리큐에 전송
 				taskOperation->receivePacket(packet);
 
+
+				// 수신 이벤트 
 				perIoData->wsaBuf.len = 0;
 				perIoData->wsaBuf.buf = NULL;
 				perIoData->rwMode = READ;
 				dwFlags = 0;
-
 				WSARecv(perHandleData->hClntSock, &(perIoData->wsaBuf), 1, &bytesTransferred, &dwFlags, &(perIoData->overlapped), NULL);
 
 				dataLen = 0;
 			}
-			else {
-				//cloas 에러 처리 !!!!
+			//데이터 길이가 0이면 소켓 연결 종료
+			else {				
 				std::cout << "rev error\n";
-				char* socket_error_buf = new char[sizeof(Packet_Header)];
-				memset(socket_error_buf, 0, sizeof(Packet_Header));
-				Packet_Header* error_header = (Packet_Header*)socket_error_buf;
-				error_header->totalLen = sizeof(Packet_Header);
+
+				//에러 패킷 생성 및 처리큐 전송
+				char* socket_error_buf = new char[sizeof(Data_Header)];
+				memset(socket_error_buf, 0, sizeof(Data_Header));
+				Data_Header* error_header = (Data_Header*)socket_error_buf;
+				error_header->totalLen = sizeof(Data_Header);
 
 				error_header->protocol = C_SOCKET_ERROR;
 
@@ -195,20 +201,18 @@ UINT WINAPI IOCPServer::work() {
 				memcpy(&socket_error_packet->clntAddr, &perHandleData->clntAddr, sizeof(perHandleData->clntAddr));
 				socket_error_packet->data->arr = socket_error_buf;
 				socket_error_packet->data->reference_count = 1;
-				socket_error_packet->dataLen = sizeof(Packet_Header);
+				socket_error_packet->dataLen = sizeof(Data_Header);
 
 				taskOperation->receivePacket(socket_error_packet);
 
+				// 소켓 종료
 				closesocket(perHandleData->hClntSock);
-
-
 			}
-
-
 		}
-		else if ((perIoData->rwMode & WRITE) == WRITE) {
+		else if (perIoData->rwMode == WRITE) {
 			PACKET_DATA* packet;
 
+			// 전송큐에서 데이터를 받는다
 			{
 				std::unique_lock<std::mutex> lock(mutex_send_queue);
 				if (send_queue.empty()) {
@@ -219,19 +223,21 @@ UINT WINAPI IOCPServer::work() {
 				send_queue.pop();
 			}
 
-
-
+			
 			if (send_queue.size() > BUFFER_WARING) std::cout << "send_queue warnig\n";
 
-
+			//데이터 전송
 			if (packet->data != NULL) {
 				if (send(packet->hClntSock, packet->data->arr, packet->dataLen, 0) == -1) {
 					std::cout << "send error\n";
 				}
 
+				//패킷 데이터 참조값 조사후 delete
 				taskOperation->sendPacketClear(packet);
 			}
 
+
+			//송신 이벤트 
 			perIoData->wsaBuf.len = 0;
 			perIoData->wsaBuf.buf = NULL;
 			perIoData->rwMode = WRITE;
@@ -247,6 +253,7 @@ UINT WINAPI IOCPServer::work() {
 
 void IOCPServer::sendData(PACKET_DATA* packet) {
 
+	// 전송큐에 push 및 송신 이밴트
 	{
 		std::lock_guard<std::mutex> lock(mutex_send_queue);
 		packet->perIoData->wsaBuf.len = 0;
