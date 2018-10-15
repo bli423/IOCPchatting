@@ -107,7 +107,7 @@ void DBThread::messageWriteRun() {
 
 		{
 			std::unique_lock<std::mutex> lock(mutex_messageWriteBuf);
-			while (messageWriteBuf.size()<2) {
+			while (messageWriteBuf.size()==0) {
 				cv_messageWriteBuf.wait(lock);
 			}
 
