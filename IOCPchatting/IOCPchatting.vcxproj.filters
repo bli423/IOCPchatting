@@ -27,6 +27,9 @@
     <ClInclude Include="TaskOperation.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="DBThread.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="NetWorkStruct.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -42,6 +45,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="Main.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="DBThread.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

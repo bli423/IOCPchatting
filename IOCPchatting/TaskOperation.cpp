@@ -5,7 +5,6 @@
 
 TaskOperation::TaskOperation()
 {
-	room_counter = 0;
 	for (int i = 0; i < ROOM_COUNT; i++) {
 		room[i].rommId = i;
 		roomList[room[i].rommId] = room[i];
@@ -14,7 +13,7 @@ TaskOperation::TaskOperation()
 
 TaskOperation::~TaskOperation()
 {
-
+	delete dbThread;
 }
 
 void TaskOperation::setIOCP(IOCPServer* iocp) {
@@ -25,6 +24,11 @@ void TaskOperation::setIOCP(IOCPServer* iocp) {
 void TaskOperation::Run() {
 	_beginthreadex(NULL, 0, receiveThread, (void*)this, 0, NULL);
 	_beginthreadex(NULL, 0, controlThread, (void*)this, 0, NULL);
+
+	dbThread = new DBThread(this);
+	dbThread->Run();
+
+	
 }
 
 
@@ -39,7 +43,6 @@ void TaskOperation::receiveRun() {
 	while (true) {
 		PACKET_DATA* packet;
 		{
-
 			std::unique_lock<std::mutex> lock(mutex_receiveBuf);
 			while (receiveBuf.empty()) {
 				cv_receiveBuf.wait(lock);
@@ -61,33 +64,33 @@ void TaskOperation::receiveRun() {
 		// 기존에 잘려진 패킷 조사
 		if (find != packetBuffer.end()) {
 			PACKET_DATA* temp_packet = (PACKET_DATA*)(*find).second;
-			int merge_data_len = temp_packet->dataLen + packet->dataLen;
+			int merge_data_len = temp_packet->data->dataLen + packet->data->dataLen;
 			char* merge_data = new char[merge_data_len];
 
-			memcpy(merge_data, temp_packet->data->arr, temp_packet->dataLen);
-			memcpy(&merge_data[temp_packet->dataLen], packet->data->arr, packet->dataLen);
+			memcpy(merge_data, temp_packet->data->arr, temp_packet->data->dataLen);
+			memcpy(&merge_data[temp_packet->data->dataLen], packet->data->arr, packet->data->dataLen);
 
 			delete packet->data->arr;
 
 
 			packet->data->arr = merge_data;
-			packet->dataLen = merge_data_len;
+			packet->data->dataLen = merge_data_len;
 		}
 
 		WORD* packet_tLen = (WORD*)packet->data->arr;
 
 		// 패킷 길이 조사
-		if (*packet_tLen > packet->dataLen) {
+		if (*packet_tLen > packet->data->dataLen) {
 			
 			//길이가 짧으면 패킷을 합치고 다시 MAP에 저장
 			if (find != packetBuffer.end()) {
-				char* temp_data = new char[packet->dataLen];
-				memcpy(temp_data, packet->data->arr, packet->dataLen);
+				char* temp_data = new char[packet->data->dataLen];
+				memcpy(temp_data, packet->data->arr, packet->data->dataLen);
 
 				delete (*find).second->data->arr;
 
 				(*find).second->data->arr = temp_data;
-				(*find).second->dataLen = packet->dataLen;
+				(*find).second->data->dataLen = packet->data->dataLen;
 
 			}
 			else {
@@ -95,11 +98,11 @@ void TaskOperation::receiveRun() {
 				DATA_INFO* data_info = new DATA_INFO;
 				temp_packet->data = data_info;
 
-				temp_packet->data->arr = new char[packet->dataLen];
+				temp_packet->data->arr = new char[packet->data->dataLen];
 				temp_packet->data->reference_count = packet->data->reference_count;
 				memcpy(&temp_packet->clntAddr, &packet->clntAddr, sizeof(SOCKADDR_IN));
-				memcpy(temp_packet->data->arr, packet->data->arr, packet->dataLen);
-				temp_packet->dataLen = packet->dataLen;
+				memcpy(temp_packet->data->arr, packet->data->arr, packet->data->dataLen);
+				temp_packet->data->dataLen = packet->data->dataLen;
 				temp_packet->hClntSock = packet->hClntSock;
 				temp_packet->perIoData = packet->perIoData;
 
@@ -121,7 +124,7 @@ void TaskOperation::receiveRun() {
 
 
 		// 프로토콜 확인 
-		if (!(packet->data->arr[2] <= C_SOCKET_ERROR && packet->data->arr[2] >= 2)) {
+		if (!(packet->data->arr[2] <= C_REQUST_ROOMINFO && packet->data->arr[2] >= 2)) {
 			std::cout << "패킷 꼬임\n";
 			continue;
 		}
@@ -149,9 +152,6 @@ void TaskOperation::receiveRun() {
 	}
 }
 
-void TaskOperation::dbRun() {
-
-}
 
 
 // 데이터 처리 스레드
@@ -407,6 +407,7 @@ void TaskOperation::controlRun() {
 			std::list<mUSER*>::iterator itor = (*now_room).second.userList.begin();
 
 
+
 			///패킷 설정
 			WORD totalLen = *message_len + sizeof(Data_Header) + 2;
 			char* data = new char[totalLen];
@@ -418,16 +419,41 @@ void TaskOperation::controlRun() {
 			data_info->reference_count = size;
 			////////////
 
-
 			memcpy(&data[20], message_len, sizeof(WORD));
 			memcpy(&data[22], &packet->data->arr[22], *message_len);
 			
+			//DB에 메세지 저장
+			dbThread->addMessage((char*)userid.c_str(), user->roomId, std::string(&packet->data->arr[22], *message_len));
 
 			for (; itor != (*now_room).second.userList.end(); itor++) {
 				PACKET_DATA* send_packet = makePacket((*itor)->hClntSock, (*itor)->perIoData, data_info, send_header->totalLen);
 				iocp->sendData(send_packet);
 			}
 
+		}
+		else if (header->protocol == C_REQUST_ROOMINFO) {
+			WORD* roomid = (WORD*)&packet->data->arr[20];
+
+			dbThread->getRoomLog((char*)userid.c_str(),*roomid);
+		}
+		else if (header->protocol == C_RECEIVE_ROOMINFO) {
+			WORD* message_len = (WORD*)&packet->data->arr[20];
+			mUSER* user = findUser(userid);
+
+			WORD totalLen = *message_len + sizeof(Data_Header) + 2;
+			char* data = new char[totalLen];
+			headerSet(data, totalLen, C_RECEIVE_ROOMINFO, (char*)userid.c_str());
+			Data_Header* send_header = (Data_Header*)data;			
+			DATA_INFO* data_info = new DATA_INFO;
+			data_info->arr = data;
+			data_info->reference_count = 1;
+
+			memcpy(&data[20], message_len, sizeof(WORD));
+			memcpy(&data[22], &packet->data->arr[22], *message_len);
+
+
+			PACKET_DATA* send_packet = makePacket(user->hClntSock, user->perIoData, data_info, send_header->totalLen);
+			iocp->sendData(send_packet);
 		}
 		else {
 			std::cout << "????? warning\n";
@@ -469,7 +495,7 @@ void TaskOperation::receivePacketClear(PACKET_DATA*  packet) {
 void TaskOperation::sendPacketClear(PACKET_DATA*  packet) {
 
 	{
-		std::unique_lock<std::mutex> lock(m_Mutex);
+		std::lock_guard<std::mutex> lock(m_Mutex);
 		if (packet != NULL) {
 			if (packet->data->arr != NULL) {
 				packet->data->reference_count -= 1; // 참조값 감소
@@ -499,7 +525,7 @@ PACKET_DATA* TaskOperation::makePacket(SOCKET hClntSock, PER_IO_DATA* perIoData,
 	send_packet->perIoData = perIoData;
 	send_packet->hClntSock = hClntSock;
 	send_packet->data = data;
-	send_packet->dataLen = dataLen;
+	send_packet->data->dataLen = dataLen;
 
 	return send_packet;
 }
@@ -613,4 +639,29 @@ bool  TaskOperation::addRoomUser(mUSER* user, WORD roomid) {
 		return false;
 	}
 
+}
+
+
+void TaskOperation::sendClearJob(char* requst_id, char* data, DWORD data_len) {
+	char* send_data = new char[sizeof(Data_Header) +2+ data_len];
+
+	memcpy(&send_data[sizeof(Data_Header)], &data_len, 2);
+	memcpy(&send_data[sizeof(Data_Header) + 2], data, data_len);
+
+	PACKET_DATA* packet = new PACKET_DATA;
+	DATA_INFO* data_info = new DATA_INFO;
+	packet->data = data_info;
+	Data_Header* header;
+	header = (Data_Header*)send_data;
+	header->protocol = C_RECEIVE_ROOMINFO;
+	memcpy(header->id, requst_id,USERID_LEN);
+	data_info->dataLen = sizeof(Data_Header) + 2 + data_len;
+	data_info->arr = send_data;
+	data_info->reference_count = 1;
+
+	{
+		std::lock_guard<std::mutex> lock(mutex_messageBuf);
+		messageBuf.push_back(packet);
+		cv_messageBuf.notify_all();
+	}
 }

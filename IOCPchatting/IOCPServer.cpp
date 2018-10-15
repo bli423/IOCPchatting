@@ -166,7 +166,7 @@ UINT WINAPI IOCPServer::work() {
 
 				packet->data->arr = data;
 				packet->data->reference_count = 1;
-				packet->dataLen = dataLen;
+				packet->data->dataLen = dataLen;
 
 				//패킷 처리큐에 전송
 				taskOperation->receivePacket(packet);
@@ -201,7 +201,7 @@ UINT WINAPI IOCPServer::work() {
 				memcpy(&socket_error_packet->clntAddr, &perHandleData->clntAddr, sizeof(perHandleData->clntAddr));
 				socket_error_packet->data->arr = socket_error_buf;
 				socket_error_packet->data->reference_count = 1;
-				socket_error_packet->dataLen = sizeof(Data_Header);
+				socket_error_packet->data->dataLen = sizeof(Data_Header);
 
 				taskOperation->receivePacket(socket_error_packet);
 
@@ -228,7 +228,7 @@ UINT WINAPI IOCPServer::work() {
 
 			//데이터 전송
 			if (packet->data != NULL) {
-				if (send(packet->hClntSock, packet->data->arr, packet->dataLen, 0) == -1) {
+				if (send(packet->hClntSock, packet->data->arr, packet->data->dataLen, 0) == -1) {
 					std::cout << "send error\n";
 				}
 

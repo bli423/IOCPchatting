@@ -1,3 +1,4 @@
+#pragma once
 
 #include <iostream>
 #include <string>
@@ -7,33 +8,17 @@
 #include <map>
 #include <list>
 #include <utility>
-#include <vector>
+
 #include "NetWorkStruct.h"
+
 
 #ifndef TaskOperation_H
 #define TaskOperation_H
 class IOCPServer;
+class DBThread;
 
 #include "IOCPServer.h"
-
-
-#define C_CONNECT			9
-#define C_CLOSE				11
-#define C_ENTER_ROOM		13
-#define C_EXIT_ROOM			14
-#define C_SOCKET_ERROR		15
-#define C_MESSAGE			4
-
-#define BUFFER_WARING		50000
-
-
-#define C_ROOMINFO	19
-
-
-#define IN_LOBBY		0
-#define IN_ROOM			1
-
-#define ROOM_COUNT		100
+#include "DBThread.h"
 
 struct PACKET_DATA;
 
@@ -57,7 +42,9 @@ struct mROOM {
 class TaskOperation
 {
 private:
-	IOCPServer * iocp;
+	IOCPServer* iocp;
+	DBThread* dbThread;
+
 	std::mutex m_Mutex;
 
 	std::queue<PACKET_DATA*> receiveBuf;
@@ -72,17 +59,12 @@ private:
 	std::map<std::string, mUSER*> userList;
 	std::map<WORD, mROOM> roomList;
 
-	int room_counter;
-
 	static unsigned int __stdcall receiveThread(void* taskOperation);
 	void receiveRun();
 
 
 	static unsigned int __stdcall controlThread(void* taskOperation);
 	void controlRun();
-
-	static unsigned int __stdcall dbThread(void* taskOperation);
-	void dbRun();
 
 
 	void headerSet(char* data, WORD totalLen, WORD protocol, char* id);
@@ -108,6 +90,7 @@ public:
 	void sendPacketClear(PACKET_DATA*  packet);
 	void setIOCP(IOCPServer* iocp);
 	void receivePacket(PACKET_DATA* data);
+	void sendClearJob(char* requst_id,char* data, DWORD data_len) ;
 	void Run();
 };
 
