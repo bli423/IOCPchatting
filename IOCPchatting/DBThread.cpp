@@ -103,11 +103,11 @@ unsigned int __stdcall DBThread::messageWriteThread(void* dbThread) {
 void DBThread::messageWriteRun() {
 	while (true) {
 				
-		std::string* requset = new std::string("insert into messageLog( date , uid , roomid , message)");
+		std::string* requset = new std::string("insert into messageLog( date , uid , roomid , message) VALUES");
 
 		{
 			std::unique_lock<std::mutex> lock(mutex_messageWriteBuf);
-			while (messageWriteBuf.empty()) {
+			while (messageWriteBuf.size()<2) {
 				cv_messageWriteBuf.wait(lock);
 			}
 
@@ -120,7 +120,7 @@ void DBThread::messageWriteRun() {
 				std::string sUser_id((char*)message_log->user_id, USERID_LEN);
 				std::string sRoom_id = std::to_string(message_log->room_id);
 
-				requset->append(std::string("VALUES("));
+				requset->append(std::string("("));
 				requset->append(sDate);
 				requset->append(std::string(", \'"));
 				requset->append(sUser_id.data());
@@ -128,13 +128,14 @@ void DBThread::messageWriteRun() {
 				requset->append(sRoom_id);
 				requset->append(std::string(", \'"));
 				requset->append(message_log->message->data());
-				requset->append(std::string("\')"));
+				requset->append(std::string("\'),"));
 
 				delete message_log->message;				
 				delete message_log;				
 			}
 		}
 		
+		requset->pop_back();
 		int query_stat = mysql_query(connectionWrite, requset->data());
 
 		if (query_stat != 0){
