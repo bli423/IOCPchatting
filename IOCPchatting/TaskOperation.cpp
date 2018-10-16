@@ -131,11 +131,11 @@ void TaskOperation::receiveRun() {
 
 
 		// 정상적이 패킷 처리
-		Data_Header* header;
-		header = (Data_Header*)packet->data->arr;
+		TotalLen_Protocol* totalLen_protocol;
+		totalLen_protocol = (TotalLen_Protocol*)packet->data->arr;
 
 		// 우선처리 패킷 (프로그램 종료, 소켓에러)
-		if (header->protocol == C_CLOSE || header->protocol == C_SOCKET_ERROR) {
+		if (totalLen_protocol->protocol == C_CLOSE || totalLen_protocol->protocol == C_SOCKET_ERROR) {
 			{
 				std::lock_guard<std::mutex> lock(mutex_messageBuf);
 				messageBuf.push_front(packet);
@@ -175,71 +175,93 @@ void TaskOperation::controlRun() {
 
 		if (messageBuf.size() > BUFFER_WARING) std::cout << "messageBuf warnig\n";
 
-		Data_Header* header;
-		header = (Data_Header*)packet->data->arr;
-		std::string userid(header->id, USERID_LEN);
+		Default_Header* default_header;
+		default_header = (Default_Header*)packet->data->arr;
+		std::string userid(default_header->id, USERID_LEN);
 
 
-		if (header->protocol == C_CONNECT) {
+		if (default_header->protocol == C_CONNECT) {
 			//DB에서 id pass 비교 하는 로직 구현해야함	
 			mUSER* user = registeUser(userid, packet->hClntSock, packet->clntAddr, packet->perIoData);
 
+			C_CONNECT_Header_Ask* connect_header;
+			connect_header = (C_CONNECT_Header_Ask*)packet->data->arr;
 
-			///패킷 설정
-			WORD totalLen = header->totalLen + 1;
-			char* data = new char[totalLen];
-			headerSet(data, totalLen, C_CONNECT, (char*)userid.c_str());
-			Data_Header* send_header = (Data_Header*)data;
-			DATA_INFO* data_info = new DATA_INFO;
-			data_info->arr = data;
-			data_info->reference_count = 1;
-			/////
-
-
+			bool canLogin;
 
 			if (user != NULL) {
-				data[20] = 1;
-
-				PACKET_DATA* send_packet = makePacket(user->hClntSock, user->perIoData, data_info, send_header->totalLen);
-				iocp->sendData(send_packet);
+				canLogin = true;
 			}
 			else {
-				data[20] = 0;
-
-				PACKET_DATA* send_packet = makePacket(packet->hClntSock, packet->perIoData, data_info, send_header->totalLen);
-				iocp->sendData(send_packet);
+				canLogin = false;			
 			}
 
-		}
-		else if (header->protocol == C_CLOSE) {
-			mUSER* user = findUser(userid);
+					   			 
 
-
-			///패킷 설정
-			WORD totalLen = header->totalLen + 1;
+			///////////////패킷 설정/////////////////////
+			WORD totalLen = sizeof(C_CONNECT_Header_Answer);
 			char* data = new char[totalLen];
-			headerSet(data, totalLen, C_CLOSE, (char*)userid.c_str());
-			Data_Header* send_header = (Data_Header*)data;
+
+			C_CONNECT_Header_Answer* connect_answer = (C_CONNECT_Header_Answer*)data;
+			connect_answer->totalLen = totalLen;
+			connect_answer->protocol = C_CONNECT;
+			memcpy(connect_answer->id, userid.c_str(), USERID_LEN);
+			connect_answer->canLogin = canLogin;
+
 			DATA_INFO* data_info = new DATA_INFO;
 			data_info->arr = data;
 			data_info->reference_count = 1;
-			///////
+			///////////////////////////////////////////			
+			if (canLogin) {
+				PACKET_DATA* send_packet = makePacket(user->hClntSock, user->perIoData, data_info, connect_answer->totalLen);
+				iocp->sendData(send_packet);
+			}else{
+				PACKET_DATA* send_packet = makePacket(packet->hClntSock, packet->perIoData, data_info, connect_answer->totalLen);
+				iocp->sendData(send_packet);
+			}
 
-			data[20] = removeUser(user);	
+			
 
+		}
+		else if (default_header->protocol == C_CLOSE) {
+			mUSER* user = findUser(userid);
 
+			C_CLOSE_Header_Ask* close_header;
+			close_header = (C_CLOSE_Header_Ask*)packet->data->arr;
 
-			PACKET_DATA* send_packet = makePacket(user->hClntSock, user->perIoData, data_info, send_header->totalLen);
+			bool canLogout;
+
+			//////////////////패킷 설정///////////////////////
+			WORD totalLen = sizeof(C_CLOSE_Header_Answer);
+			char* data = new char[totalLen];		
+
+			C_CLOSE_Header_Answer* close_answer = (C_CLOSE_Header_Answer*)data;
+			close_answer->totalLen = totalLen;
+			close_answer->protocol = C_CLOSE;
+			memcpy(close_answer->id, userid.c_str(), USERID_LEN);
+			
+
+			DATA_INFO* data_info = new DATA_INFO;
+			data_info->arr = data;
+			data_info->reference_count = 1;
+			//////////////////////////////////////////////
+			canLogout = removeUser(user);
+			close_answer->canLogout = canLogout;
+
+			PACKET_DATA* send_packet = makePacket(packet->hClntSock, packet->perIoData, data_info, close_answer->totalLen);
 			iocp->sendData(send_packet);
 		}
-		else if (header->protocol == C_ENTER_ROOM) {
-			WORD* roomid = (WORD*)&packet->data->arr[20];
+		else if (default_header->protocol == C_ENTER_ROOM) {
 			mUSER* user = findUser(userid);
+					
+			C_ENTER_ROOM_Header_Ask* enter_room_header;
+			enter_room_header = (C_ENTER_ROOM_Header_Ask*)packet->data->arr;
+			
 			bool isEnter;
-
+			WORD roomid = enter_room_header->roomid;
 
 			if (user != NULL) {
-				if (addRoomUser(user, *roomid)) {
+				if (addRoomUser(user, roomid)) {
 					isEnter = true;
 				}
 				else {
@@ -250,88 +272,101 @@ void TaskOperation::controlRun() {
 				isEnter = false;
 			}
 
+
 			if (isEnter) {
 				std::map<WORD, mROOM>::iterator now_room = roomList.find(user->roomId);
 				std::list<mUSER*>::iterator itor = (*now_room).second.userList.begin();
 
 				{
 					
-					///패킷 설정
-					WORD totalLen = sizeof(Data_Header) + 3;
+					/////////////////패킷 설정
+					WORD totalLen = sizeof(C_ENTER_ROOM_Header_Answer);
 					char* data = new char[totalLen];
-					headerSet(data, totalLen, C_ENTER_ROOM, (char*)userid.c_str());
-					Data_Header* send_header = (Data_Header*)data;
-					memcpy(&data[20], roomid, sizeof(WORD));
-					data[22] = isEnter;
-					int size = (*now_room).second.userList.size();
+
+					C_ENTER_ROOM_Header_Answer* enter_room_answer = (C_ENTER_ROOM_Header_Answer*)data;
+					enter_room_answer->totalLen = totalLen;
+					enter_room_answer->protocol = C_ENTER_ROOM;
+					memcpy(enter_room_answer->id, userid.c_str(), USERID_LEN);
+					enter_room_answer->roomid = roomid;
+					enter_room_answer->canEnter = isEnter;
+
+					int reference_count = (*now_room).second.userList.size();
 					DATA_INFO* data_info = new DATA_INFO;
 					data_info->arr = data;
-					data_info->reference_count = size;
-					//////////
-
+					data_info->reference_count = reference_count;
+					////////////////////////////////////////////
+					
 
 					//같은방 사용자들에게 알림
 					for (; itor != (*now_room).second.userList.end(); itor++) {
-						PACKET_DATA* send_packet = makePacket((*itor)->hClntSock, (*itor)->perIoData, data_info, send_header->totalLen);
+						PACKET_DATA* send_packet = makePacket((*itor)->hClntSock, (*itor)->perIoData, data_info, enter_room_answer->totalLen);
 						iocp->sendData(send_packet);
 					}
 
 				}
 				{
-					///패킷 설정
+					/////////////////패킷 설정  
 					WORD numberOfRoom = (*now_room).second.userList.size();
-					WORD totalLen = sizeof(Data_Header) + (USERID_LEN* numberOfRoom) + 2;
+					WORD totalLen = sizeof(C_ROOMINFO_Header) + (USERID_LEN*numberOfRoom);
 					char* data = new char[totalLen];
-					headerSet(data, totalLen, C_ROOMINFO, (char*)userid.c_str());
-					Data_Header* send_header = (Data_Header*)data;
-					memcpy(&data[20], &numberOfRoom, sizeof(WORD));
-					DATA_INFO* data_info = new DATA_INFO;
-					data_info->arr = data;
-					data_info->reference_count = 1;
-					///////////////
+					
+					C_ROOMINFO_Header* send_roominfo = (C_ROOMINFO_Header*)data;
+					send_roominfo->totalLen = totalLen;
+					send_roominfo->protocol = C_ROOMINFO;
+					memcpy(send_roominfo->id, userid.c_str(), USERID_LEN);
+					send_roominfo->count = numberOfRoom;
 
 
 					//기존에 존재하는 사용자 정보
 					itor = (*now_room).second.userList.begin();
 					int n = 0;
 					for (; itor != (*now_room).second.userList.end(); itor++) {
-						memcpy(&data[sizeof(Data_Header) + 2 + (n*USERID_LEN)], (*itor)->id, USERID_LEN);
+						memcpy(&data[sizeof(C_ROOMINFO_Header) + (n*USERID_LEN)], (*itor)->id, USERID_LEN);
 						n++;
 					}
 					
 
-					PACKET_DATA* send_packet = makePacket(user->hClntSock, user->perIoData, data_info, send_header->totalLen);
+					DATA_INFO* data_info = new DATA_INFO;
+					data_info->arr = data;
+					data_info->reference_count = 1;
+					//////////////////////////		
+					
+
+					PACKET_DATA* send_packet = makePacket(user->hClntSock, user->perIoData, data_info, send_roominfo->totalLen);
 					iocp->sendData(send_packet);
 
 				}
 			}
-			else {
-
-				///패킷 설정
-				WORD totalLen = sizeof(Data_Header);
+			else {///입장 거부
+				
+				//////////////패킷 설정////////////////////
+				WORD totalLen = sizeof(C_ENTER_ROOM_Header_Answer);
 				char* data = new char[totalLen];
-				headerSet(data, totalLen, C_ENTER_ROOM, (char*)userid.c_str());
-				Data_Header* send_header = (Data_Header*)data;
+
+				C_ENTER_ROOM_Header_Answer* enter_room_answer = (C_ENTER_ROOM_Header_Answer*)data;
+				enter_room_answer->totalLen = totalLen;
+				enter_room_answer->protocol = C_ENTER_ROOM;
+				memcpy(enter_room_answer->id, userid.c_str(), USERID_LEN);
+				enter_room_answer->roomid = roomid;
+				enter_room_answer->canEnter = isEnter;
+						
 				DATA_INFO* data_info = new DATA_INFO;
 				data_info->arr = data;
 				data_info->reference_count = 1;
-				///////////
+				////////////////////////////////////////
 
-
-				memcpy(&data[20], roomid, sizeof(WORD));
-				data[22] = isEnter;
-
-
-				
-
-				PACKET_DATA* send_packet = makePacket(user->hClntSock, user->perIoData, data_info, send_header->totalLen);
+				PACKET_DATA* send_packet = makePacket(user->hClntSock, user->perIoData, data_info, enter_room_answer->totalLen);
 				iocp->sendData(send_packet);
 
 			}
 
 		}
-		else if (header->protocol == C_EXIT_ROOM) {
+		else if (default_header->protocol == C_EXIT_ROOM) {
 			mUSER* user = findUser(userid);
+
+			C_EXIT_ROOM_Header_Ask* enter_room_header;
+			enter_room_header = (C_EXIT_ROOM_Header_Ask*)packet->data->arr;
+
 			bool isExit;
 			int roomid = user->roomId;
 			isExit = eixtUser(user);
@@ -340,47 +375,52 @@ void TaskOperation::controlRun() {
 				std::map<WORD, mROOM>::iterator now_room = roomList.find(roomid);
 
 				if ((*now_room).second.userList.size() > 0) {
-					std::list<mUSER*>::iterator itor = (*now_room).second.userList.begin();
+					std::list<mUSER*>::iterator itor = (*now_room).second.userList.begin();	
 
-					////패킷 설정
-					WORD totalLen = sizeof(Data_Header) + 1;
-					char* data = new char[totalLen];
-					headerSet(data, totalLen, C_EXIT_ROOM, (char*)userid.c_str());
-					Data_Header* send_header = (Data_Header*)data;
-					DATA_INFO* data_info = new DATA_INFO;					
-					int size = (*now_room).second.userList.size();
-					data_info->arr = data;
-					data_info->reference_count = size;
-					///////////
-
-
-					data[20] = isExit;
 					
+					/////////////패킷 설정
+					WORD totalLen = sizeof(C_EXIT_ROOM_Header_Answer);
+					char* data = new char[totalLen];
+					C_EXIT_ROOM_Header_Answer* exit_room_answer = (C_EXIT_ROOM_Header_Answer*)data;
+
+					exit_room_answer->totalLen = totalLen;
+					exit_room_answer->protocol = C_EXIT_ROOM;
+					memcpy(exit_room_answer->id, userid.c_str(), USERID_LEN);
+					exit_room_answer->canEexit = isExit;
+	
+					DATA_INFO* data_info = new DATA_INFO;					
+					int reference_count = (*now_room).second.userList.size();
+					data_info->arr = data;
+					data_info->reference_count = reference_count;
+					///////////////////////////////////
+			
 
 					for (; itor != (*now_room).second.userList.end(); itor++) {
-						PACKET_DATA* send_packet = makePacket((*itor)->hClntSock, (*itor)->perIoData, data_info, send_header->totalLen);
+						PACKET_DATA* send_packet = makePacket((*itor)->hClntSock, (*itor)->perIoData, data_info, exit_room_answer->totalLen);
 						iocp->sendData(send_packet);
 					}
 				}
 			}
-			////패킷 설정
-			WORD totalLen = header->totalLen + 1;
+			////////////패킷 설정
+			WORD totalLen = sizeof(C_EXIT_ROOM_Header_Answer);
 			char* data = new char[totalLen];
-			headerSet(data, totalLen, C_EXIT_ROOM, (char*)userid.c_str());
-			Data_Header* send_header = (Data_Header*)data;
+			C_EXIT_ROOM_Header_Answer* exit_room_answer = (C_EXIT_ROOM_Header_Answer*)data;
+
+			exit_room_answer->totalLen = totalLen;
+			exit_room_answer->protocol = C_EXIT_ROOM;
+			memcpy(exit_room_answer->id, userid.c_str(), USERID_LEN);
+			exit_room_answer->canEexit = isExit;
+
 			DATA_INFO* data_info = new DATA_INFO;
 			data_info->arr = data;
 			data_info->reference_count = 1;
-			//////////
+			//////////////////////////////////
 
-			data[20] = isExit;		
-
-
-			PACKET_DATA* send_packet = makePacket(user->hClntSock, user->perIoData, data_info, send_header->totalLen);
+			PACKET_DATA* send_packet = makePacket(user->hClntSock, user->perIoData, data_info, exit_room_answer->totalLen);
 			iocp->sendData(send_packet);
 
 		}
-		else if (header->protocol == C_SOCKET_ERROR) {
+		else if (default_header->protocol == C_SOCKET_ERROR) {
 			mUSER* socket_error_user = findUserId(packet->clntAddr);
 			char uid[USERID_LEN];
 
@@ -394,10 +434,12 @@ void TaskOperation::controlRun() {
 			eixtUser(socket_error_user);
 			removeUser(socket_error_user);
 		}
-		else if (header->protocol == C_MESSAGE) {
-			WORD* message_len = (WORD*)&packet->data->arr[20];
-
+		else if (default_header->protocol == C_MESSAGE) {
 			mUSER* user = findUser(userid);
+
+			C_MESSAGE_Header* message_header = (C_MESSAGE_Header*)packet->data->arr;
+
+			WORD message_len = message_header->messageLen;		
 
 			if (user == NULL) {
 				receivePacketClear(packet);
@@ -407,53 +449,64 @@ void TaskOperation::controlRun() {
 			std::list<mUSER*>::iterator itor = (*now_room).second.userList.begin();
 
 
-
 			///패킷 설정
-			WORD totalLen = *message_len + sizeof(Data_Header) + 2;
+			WORD totalLen = sizeof(C_MESSAGE_Header) + message_len;
 			char* data = new char[totalLen];
-			headerSet(data, totalLen, C_MESSAGE, (char*)userid.c_str());
-			Data_Header* send_header = (Data_Header*)data;
+			C_MESSAGE_Header* message_send = (C_MESSAGE_Header*)data;
+			message_send->totalLen = totalLen;
+			message_send->protocol = C_MESSAGE;
+			memcpy(message_send->id, userid.c_str(), USERID_LEN);
+			message_send->messageLen = message_len;
+
 			int size = (*now_room).second.userList.size();
 			DATA_INFO* data_info = new DATA_INFO;
 			data_info->arr = data;
 			data_info->reference_count = size;
 			////////////
 
-			memcpy(&data[20], message_len, sizeof(WORD));
-			memcpy(&data[22], &packet->data->arr[22], *message_len);
+			memcpy(&data[sizeof(C_MESSAGE_Header)], &packet->data->arr[sizeof(C_MESSAGE_Header)], message_len);
 			
 			//DB에 메세지 저장
-			dbThread->addMessage((char*)userid.c_str(), user->roomId, std::string(&packet->data->arr[22], *message_len));
+			dbThread->addMessage((char*)userid.c_str(), user->roomId, std::string(&packet->data->arr[22], message_len));
 
 			for (; itor != (*now_room).second.userList.end(); itor++) {
-				PACKET_DATA* send_packet = makePacket((*itor)->hClntSock, (*itor)->perIoData, data_info, send_header->totalLen);
+				PACKET_DATA* send_packet = makePacket((*itor)->hClntSock, (*itor)->perIoData, data_info, message_send->totalLen);
 				iocp->sendData(send_packet);
 			}
 
 		}
-		else if (header->protocol == C_REQUST_ROOMINFO) {
-			WORD* roomid = (WORD*)&packet->data->arr[20];
+		else if (default_header->protocol == C_REQUST_ROOMINFO) {
+			C_REQUST_ROOMINFO_Header * requst_roominfo_header = (C_REQUST_ROOMINFO_Header*)packet->data->arr;
+			WORD roomid = requst_roominfo_header->roomid;
 
-			dbThread->getRoomLog((char*)userid.c_str(),*roomid);
+			dbThread->getRoomLog((char*)userid.c_str(),roomid);
 		}
-		else if (header->protocol == C_RECEIVE_ROOMINFO) {
-			WORD* message_len = (WORD*)&packet->data->arr[20];
+		else if (default_header->protocol == C_RECEIVE_ROOMINFO) {
 			mUSER* user = findUser(userid);
+			C_RECEIVE_ROOMINFO_Header* requst_roominfo_header = (C_RECEIVE_ROOMINFO_Header*)packet->data->arr;	
 
-			WORD totalLen = *message_len + sizeof(Data_Header) + 2;
+			WORD message_len = requst_roominfo_header->messageLen;
+			
+
+			WORD totalLen = sizeof(C_RECEIVE_ROOMINFO_Header) + message_len;
 			char* data = new char[totalLen];
-			headerSet(data, totalLen, C_RECEIVE_ROOMINFO, (char*)userid.c_str());
-			Data_Header* send_header = (Data_Header*)data;			
+			C_RECEIVE_ROOMINFO_Header* receive_roominfo_send = (C_RECEIVE_ROOMINFO_Header*)data;
+			receive_roominfo_send->totalLen = totalLen;
+			receive_roominfo_send->protocol = C_RECEIVE_ROOMINFO;
+			memcpy(receive_roominfo_send->id, userid.c_str(), USERID_LEN);
+			receive_roominfo_send->messageLen = message_len;
+		
 			DATA_INFO* data_info = new DATA_INFO;
 			data_info->arr = data;
 			data_info->reference_count = 1;
 
-			memcpy(&data[20], message_len, sizeof(WORD));
-			memcpy(&data[22], &packet->data->arr[22], *message_len);
+
+			memcpy(&data[sizeof(C_RECEIVE_ROOMINFO_Header)], &packet->data->arr[sizeof(C_RECEIVE_ROOMINFO_Header)], message_len);
 
 
-			PACKET_DATA* send_packet = makePacket(user->hClntSock, user->perIoData, data_info, send_header->totalLen);
+			PACKET_DATA* send_packet = makePacket(user->hClntSock, user->perIoData, data_info, receive_roominfo_send->totalLen);
 			iocp->sendData(send_packet);
+
 		}
 		else {
 			std::cout << "????? warning\n";
@@ -509,14 +562,6 @@ void TaskOperation::sendPacketClear(PACKET_DATA*  packet) {
 
 		}
 	}
-}
-
-//패킷 헤더 설정
-void TaskOperation::headerSet(char* data, WORD totalLen, WORD protocol, char* id) {
-	Data_Header* header = (Data_Header*)data;
-	memcpy(&data[4], id, USERID_LEN);
-	header->totalLen = totalLen;
-	header->protocol = protocol;
 }
 
 // 패킷 설정
@@ -642,20 +687,23 @@ bool  TaskOperation::addRoomUser(mUSER* user, WORD roomid) {
 }
 
 
-void TaskOperation::sendClearJob(char* requst_id, char* data, DWORD data_len) {
-	char* send_data = new char[sizeof(Data_Header) +2+ data_len];
+void TaskOperation::completeDBJob(char* requst_id, char* data, DWORD data_len) {
+	char* send_data = new char[sizeof(C_RECEIVE_ROOMINFO_Header) + data_len];
+	C_RECEIVE_ROOMINFO_Header* requst_roominfo_header = (C_RECEIVE_ROOMINFO_Header*)send_data;
 
-	memcpy(&send_data[sizeof(Data_Header)], &data_len, 2);
-	memcpy(&send_data[sizeof(Data_Header) + 2], data, data_len);
 
 	PACKET_DATA* packet = new PACKET_DATA;
+
+	requst_roominfo_header->totalLen = sizeof(C_RECEIVE_ROOMINFO_Header) + data_len;
+	requst_roominfo_header->protocol = C_RECEIVE_ROOMINFO;
+	memcpy(requst_roominfo_header->id, requst_id, USERID_LEN);
+	requst_roominfo_header->messageLen = data_len;
+
+	memcpy(&send_data[sizeof(C_RECEIVE_ROOMINFO_Header)], data, data_len);
+
 	DATA_INFO* data_info = new DATA_INFO;
 	packet->data = data_info;
-	Data_Header* header;
-	header = (Data_Header*)send_data;
-	header->protocol = C_RECEIVE_ROOMINFO;
-	memcpy(header->id, requst_id,USERID_LEN);
-	data_info->dataLen = sizeof(Data_Header) + 2 + data_len;
+	data_info->dataLen = sizeof(C_RECEIVE_ROOMINFO_Header) + data_len;
 	data_info->arr = send_data;
 	data_info->reference_count = 1;
 

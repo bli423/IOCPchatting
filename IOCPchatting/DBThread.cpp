@@ -84,12 +84,12 @@ void DBThread::singRequestRun() {
 				data_len = log->size();
 			}
 
-			taskOperation->sendClearJob((char*)request->user_id, (char*)log->c_str(),data_len);
+			taskOperation->completeDBJob((char*)request->user_id, (char*)log->c_str(),data_len);
 			delete log;
 			mysql_free_result(result);
 		}
 		
-		delete request->data;
+		//delete request->data;
 		delete request;
 		
 	}

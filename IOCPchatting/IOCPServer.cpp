@@ -186,10 +186,10 @@ UINT WINAPI IOCPServer::work() {
 				std::cout << "rev error\n";
 
 				//에러 패킷 생성 및 처리큐 전송
-				char* socket_error_buf = new char[sizeof(Data_Header)];
-				memset(socket_error_buf, 0, sizeof(Data_Header));
-				Data_Header* error_header = (Data_Header*)socket_error_buf;
-				error_header->totalLen = sizeof(Data_Header);
+				char* socket_error_buf = new char[sizeof(C_SOCKET_ERROR_Header)];
+				memset(socket_error_buf, 0, sizeof(C_SOCKET_ERROR_Header));
+				C_SOCKET_ERROR_Header* error_header = (C_SOCKET_ERROR_Header*)socket_error_buf;
+				error_header->totalLen = sizeof(C_SOCKET_ERROR_Header);
 
 				error_header->protocol = C_SOCKET_ERROR;
 
@@ -201,7 +201,7 @@ UINT WINAPI IOCPServer::work() {
 				memcpy(&socket_error_packet->clntAddr, &perHandleData->clntAddr, sizeof(perHandleData->clntAddr));
 				socket_error_packet->data->arr = socket_error_buf;
 				socket_error_packet->data->reference_count = 1;
-				socket_error_packet->data->dataLen = sizeof(Data_Header);
+				socket_error_packet->data->dataLen = sizeof(C_SOCKET_ERROR_Header);
 
 				taskOperation->receivePacket(socket_error_packet);
 
@@ -235,7 +235,6 @@ UINT WINAPI IOCPServer::work() {
 				//패킷 데이터 참조값 조사후 delete
 				taskOperation->sendPacketClear(packet);
 			}
-
 
 			//송신 이벤트 
 			perIoData->wsaBuf.len = 0;

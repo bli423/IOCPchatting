@@ -66,8 +66,6 @@ private:
 	static unsigned int __stdcall controlThread(void* taskOperation);
 	void controlRun();
 
-
-	void headerSet(char* data, WORD totalLen, WORD protocol, char* id);
 	PACKET_DATA* makePacket(SOCKET hClntSock, PER_IO_DATA* perIoData, DATA_INFO* data, WORD dataLen);
 
 public:
@@ -90,7 +88,7 @@ public:
 	void sendPacketClear(PACKET_DATA*  packet);
 	void setIOCP(IOCPServer* iocp);
 	void receivePacket(PACKET_DATA* data);
-	void sendClearJob(char* requst_id,char* data, DWORD data_len) ;
+	void completeDBJob(char* requst_id,char* data, DWORD data_len) ;
 	void Run();
 };
 

@@ -56,8 +56,105 @@ struct PACKET_DATA
 	DATA_INFO* data;
 };
 
-struct Data_Header {
+struct TotalLen_Protocol {
 	WORD totalLen;
 	WORD protocol;
-	char		 id[USERID_LEN];
 };
+struct Default_Header {
+	WORD totalLen;
+	WORD protocol;
+	char id[USERID_LEN];
+};
+
+struct C_CONNECT_Header_Ask {
+	WORD totalLen;
+	WORD protocol;
+	char id[USERID_LEN];
+};
+struct C_CONNECT_Header_Answer {
+	WORD totalLen;
+	WORD protocol;
+	char id[USERID_LEN];
+	bool canLogin;
+	char empty;
+};
+struct C_CLOSE_Header_Ask {
+	WORD totalLen;
+	WORD protocol;
+	char id[USERID_LEN];
+};
+struct C_CLOSE_Header_Answer {
+	WORD totalLen;
+	WORD protocol;
+	char id[USERID_LEN];	
+	bool canLogout;
+	char empty;
+};
+
+struct C_ENTER_ROOM_Header_Ask {
+	WORD totalLen;
+	WORD protocol;
+	char id[USERID_LEN];
+	WORD roomid;
+};
+
+struct C_ENTER_ROOM_Header_Answer {
+	WORD totalLen;
+	WORD protocol;
+	char id[USERID_LEN];
+	WORD roomid;
+	bool canEnter;
+	char empty;
+};
+struct C_ROOMINFO_Header {
+	WORD totalLen;
+	WORD protocol;
+	char id[USERID_LEN];
+	WORD count;
+};
+struct C_EXIT_ROOM_Header_Ask {
+	WORD totalLen;
+	WORD protocol;
+	char id[USERID_LEN];
+};
+struct C_EXIT_ROOM_Header_Answer {
+	WORD totalLen;
+	WORD protocol;
+	char id[USERID_LEN];
+	bool canEexit;
+	char empty;
+};
+
+struct C_SOCKET_ERROR_Header {
+	WORD totalLen;
+	WORD protocol;
+	char id[USERID_LEN];
+};
+
+
+struct C_MESSAGE_Header {
+	WORD totalLen;
+	WORD protocol;
+	char id[USERID_LEN];
+	WORD messageLen;
+};
+struct C_REQUST_ROOMINFO_Header {
+	WORD totalLen;
+	WORD protocol;
+	char id[USERID_LEN];
+	WORD roomid;
+};
+
+
+
+struct C_RECEIVE_ROOMINFO_Header {
+	WORD totalLen;
+	WORD protocol;
+	char id[USERID_LEN];
+	WORD messageLen;
+};
+
+
+
+
+
