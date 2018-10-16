@@ -89,7 +89,7 @@ void DBThread::singRequestRun() {
 			mysql_free_result(result);
 		}
 		
-		//delete request->data;
+		delete request->data;
 		delete request;
 		
 	}
