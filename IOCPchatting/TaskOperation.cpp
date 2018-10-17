@@ -7,7 +7,7 @@ TaskOperation::TaskOperation()
 {
 	for (int i = 0; i < ROOM_COUNT; i++) {
 		room[i].rommId = i;
-		roomList[room[i].rommId] = room[i];
+		roomList.insert(std::map<WORD, mROOM>::value_type(room[i].rommId, room[i]));
 	}
 }
 
