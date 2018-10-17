@@ -220,7 +220,7 @@ void TaskOperation::controlRun() {
 				iocp->sendData(send_packet);
 			}
 
-			
+			receivePacketClear(packet);
 
 		}
 		else if (default_header->protocol == C_CLOSE) {
@@ -250,6 +250,8 @@ void TaskOperation::controlRun() {
 
 			PACKET_DATA* send_packet = makePacket(packet->hClntSock, packet->perIoData, data_info, close_answer->totalLen);
 			iocp->sendData(send_packet);
+
+			receivePacketClear(packet);
 		}
 		else if (default_header->protocol == C_ENTER_ROOM) {
 			mUSER* user = findUser(userid);
@@ -360,6 +362,8 @@ void TaskOperation::controlRun() {
 
 			}
 
+			receivePacketClear(packet);
+
 		}
 		else if (default_header->protocol == C_EXIT_ROOM) {
 			mUSER* user = findUser(userid);
@@ -419,6 +423,7 @@ void TaskOperation::controlRun() {
 			PACKET_DATA* send_packet = makePacket(user->hClntSock, user->perIoData, data_info, exit_room_answer->totalLen);
 			iocp->sendData(send_packet);
 
+			receivePacketClear(packet);
 		}
 		else if (default_header->protocol == C_SOCKET_ERROR) {
 			mUSER* socket_error_user = findUserId(packet->clntAddr);
@@ -433,6 +438,8 @@ void TaskOperation::controlRun() {
 
 			eixtUser(socket_error_user);
 			removeUser(socket_error_user);
+
+			receivePacketClear(packet);
 		}
 		else if (default_header->protocol == C_MESSAGE) {
 			mUSER* user = findUser(userid);
@@ -449,10 +456,10 @@ void TaskOperation::controlRun() {
 			std::list<mUSER*>::iterator itor = (*now_room).second.userList.begin();
 
 
+			// packet data arr 재사용
 			///패킷 설정
 			WORD totalLen = sizeof(C_MESSAGE_Header) + message_len;
-			char* data = new char[totalLen];
-			C_MESSAGE_Header* message_send = (C_MESSAGE_Header*)data;
+			C_MESSAGE_Header* message_send = (C_MESSAGE_Header*)packet->data->arr;
 			message_send->totalLen = totalLen;
 			message_send->protocol = C_MESSAGE;
 			memcpy(message_send->id, userid.c_str(), USERID_LEN);
@@ -460,26 +467,26 @@ void TaskOperation::controlRun() {
 
 			int size = (*now_room).second.userList.size();
 			DATA_INFO* data_info = new DATA_INFO;
-			data_info->arr = data;
+			data_info->arr = packet->data->arr;
 			data_info->reference_count = size;
-			////////////
-
-			memcpy(&data[sizeof(C_MESSAGE_Header)], &packet->data->arr[sizeof(C_MESSAGE_Header)], message_len);
 			
 			//DB에 메세지 저장
-			dbThread->addMessage((char*)userid.c_str(), user->roomId, std::string(&packet->data->arr[22], message_len));
+			dbThread->addMessage((char*)userid.c_str(), user->roomId, std::string(&packet->data->arr[sizeof(C_MESSAGE_Header)], message_len));
 
 			for (; itor != (*now_room).second.userList.end(); itor++) {
 				PACKET_DATA* send_packet = makePacket((*itor)->hClntSock, (*itor)->perIoData, data_info, message_send->totalLen);
 				iocp->sendData(send_packet);
 			}
 
+			messagePacketClear(packet);
 		}
 		else if (default_header->protocol == C_REQUST_ROOMINFO) {
 			C_REQUST_ROOMINFO_Header * requst_roominfo_header = (C_REQUST_ROOMINFO_Header*)packet->data->arr;
 			WORD roomid = requst_roominfo_header->roomid;
 
 			dbThread->getRoomLog((char*)userid.c_str(),roomid);
+
+			receivePacketClear(packet);
 		}
 		else if (default_header->protocol == C_RECEIVE_ROOMINFO) {
 			mUSER* user = findUser(userid);
@@ -507,13 +514,13 @@ void TaskOperation::controlRun() {
 			PACKET_DATA* send_packet = makePacket(user->hClntSock, user->perIoData, data_info, receive_roominfo_send->totalLen);
 			iocp->sendData(send_packet);
 
+			receivePacketClear(packet);
 		}
 		else {
 			std::cout << "????? warning\n";
+			receivePacketClear(packet);
 		}
 
-
-		receivePacketClear(packet);
 	}
 }
 
@@ -537,6 +544,20 @@ void TaskOperation::receivePacketClear(PACKET_DATA*  packet) {
 			packet->data->reference_count -= 1;
 			if ((packet->data->reference_count <= 0)) {
 				delete packet->data->arr;
+				delete packet->data;
+			}
+		}
+		delete packet;
+	}
+}
+
+//메세지 packet data arr 재사용
+void TaskOperation::messagePacketClear(PACKET_DATA*  packet) {
+
+	if (packet != NULL) {
+		if (packet->data->arr != NULL) {
+			packet->data->reference_count -= 1;
+			if ((packet->data->reference_count <= 0)) {
 				delete packet->data;
 			}
 		}

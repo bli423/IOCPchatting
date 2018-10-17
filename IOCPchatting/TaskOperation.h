@@ -84,6 +84,7 @@ public:
 	bool eixtUser(mUSER* user);
 	bool addRoomUser(mUSER* user, WORD roomid);
 
+	void messagePacketClear(PACKET_DATA*  packet);
 	void receivePacketClear(PACKET_DATA*  packet);
 	void sendPacketClear(PACKET_DATA*  packet);
 	void setIOCP(IOCPServer* iocp);
