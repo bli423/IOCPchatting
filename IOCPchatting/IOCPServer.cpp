@@ -23,13 +23,14 @@ bool IOCPServer::Init()
 
 	GetSystemInfo(&systemInfo);
 
-	//work thread 积己   cpu胶饭靛荐* 2 systemInfo.dwNumberOfProcessors * 8
+	//work thread 积己 
 	for (int i = 0; i < systemInfo.dwNumberOfProcessors * 2; i++) {
 		_beginthreadex(NULL, 0, m_WorkThread, (void*)this, 0, NULL);
 	}
 	for (int i = 0; i < systemInfo.dwNumberOfProcessors * 2; i++) {
 		_beginthreadex(NULL, 0, m_SendThread, (void*)this, 0, NULL);
 	}
+
 	//辑滚 listen 家南 积己
 	m_ServerSocket = WSASocket(PF_INET, SOCK_STREAM, 0, NULL, 0, WSA_FLAG_OVERLAPPED);
 	if (m_ServerSocket == INVALID_SOCKET) {		

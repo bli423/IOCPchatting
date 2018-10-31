@@ -103,13 +103,14 @@ unsigned int __stdcall DBThread::messageWriteThread(void* dbThread) {
 	return 0;
 }
 void DBThread::messageWriteRun() {
+
 	while (true) {
 
 		std::string* requset = new std::string("insert into messageLog( date , uid , roomid , message) VALUES");
 
 		{
 			std::unique_lock<std::mutex> lock(m_Mutex_messageWriteBuf);
-			while (m_MessageWriteBuf.size() == 0) {
+			while (m_MessageWriteBuf.size() < 5) {
 				m_CV_messageWriteBuf.wait(lock);
 			}
 
@@ -190,7 +191,7 @@ time_t DBThread::getNowTime() {
 
 	std::chrono::system_clock::time_point tp = std::chrono::system_clock::now();
 	std::chrono::duration<double> temp_time = tp.time_since_epoch();
-	now_time = temp_time.count() * 1000;
+	now_time = temp_time.count();
 
 	return now_time;
 }

@@ -62,6 +62,11 @@ public:
 		SOCKET	 _clientSock,
 		SOCKADDR_IN& _clientAddr,
 		DATA& _data);
+	Packet(
+		SOCKET	 _clientSock,
+		SOCKADDR_IN& _clientAddr,
+		char* _arr,
+		int _len);
 	~Packet();
 
 
@@ -73,6 +78,8 @@ public:
 	u_int64				getIPandPORT();
 
 	void				merge(Packet& _additionalPacket);
+	Packet&				cutInTwo(int _position);
+
 
 private:
 	std::mutex			m_Mutex;
@@ -80,24 +87,6 @@ private:
 	SOCKET				m_Socket;
 	SOCKADDR_IN			m_ClientAddr;
 	DATA				&m_Data;
-};
-
-
-class SendPacket
-{
-public:
-	SendPacket(		
-		Packet& _packet, 
-		IO_DATA& _ioData);
-	~SendPacket();
-
-	Packet&			getPacket();
-	IO_DATA&		getIoData();
-
-private:
-	
-	Packet			&m_Packet;
-	IO_DATA			&m_IoData;
 };
 
 #endif
