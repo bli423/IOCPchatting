@@ -2,35 +2,37 @@
 #include "DBThread.h"
 
 
-DBThread::DBThread(TaskOperation* taskOperation)
+DBThread::DBThread()
 {
-	this->taskOperation = taskOperation;
 }
 
 
 DBThread::~DBThread()
 {
-	mysql_close(&mysqlRequest);
-	mysql_close(&mysqlRequestWrite);
+	mysql_close(m_ConnectionRequest);
+	mysql_close(m_ConnectionWrite);
 }
 
+void DBThread::Init(TaskOperation& _taskOperation)
+{
+	m_TaskOperation = &_taskOperation;
 
-void DBThread::Run() {
-	connectionRequest;
-	connectionWrite;
+	mysql_init(&m_MysqlRequest);
+	mysql_init(&m_MysqlRequestWrite);
 
-	mysql_init(&mysqlRequest);
-	mysql_init(&mysqlRequestWrite);
+	m_ConnectionRequest = mysql_real_connect(&m_MysqlRequest, "127.0.0.1", "nam", "7989", "Message", 3306, NULL, 0);
+	m_ConnectionWrite = mysql_real_connect(&m_MysqlRequestWrite, "127.0.0.1", "nam2", "7989", "Message", 3306, NULL, 0);
 
-	connectionRequest = mysql_real_connect(&mysqlRequest, "127.0.0.1", "nam", "7989", "Message", 3306, NULL, 0);
-	connectionWrite = mysql_real_connect(&mysqlRequestWrite, "127.0.0.1", "nam2", "7989", "Message", 3306, NULL, 0);
-
-	if (connectionRequest == NULL) {
+	if (m_ConnectionRequest == NULL) {
 		std::cout << "db connectionRequest error\n";
 	}
-	if (connectionWrite == NULL) {
+	if (m_ConnectionWrite == NULL) {
 		std::cout << "db connectionWrite error\n";
 	}
+
+}
+
+void DBThread::Run() {
 
 	_beginthreadex(NULL, 0, singRequestThread, (void*)this, 0, NULL);
 	_beginthreadex(NULL, 0, messageWriteThread, (void*)this, 0, NULL);
@@ -47,22 +49,22 @@ void DBThread::singRequestRun() {
 		REQUEST_DATA* request;
 
 		{
-			std::unique_lock<std::mutex> lock(mutex_singRequestBuf);
-			while (singRequestBuf.empty()) {
-				cv_singRequestBuf.wait(lock);
+			std::unique_lock<std::mutex> lock(m_Mutex_SingRequestBuf);
+			while (m_SingRequestBuf.empty()) {
+				m_CV_SingRequestBuf.wait(lock);
 			}
-			request = singRequestBuf.front();
-			singRequestBuf.pop();
+			request = m_SingRequestBuf.front();
+			m_SingRequestBuf.pop();
 		}
-		
-		int query_stat = mysql_query(connectionRequest, request->data->data());
+
+		int query_stat = mysql_query(m_ConnectionRequest, request->data->data());
 
 		if (query_stat != 0) {
 			std::cout << "Mysql connectionRequest query error \n";
 		}
 		else {
 			int data_len = 0;
-			MYSQL_RES* result = mysql_store_result(connectionRequest);
+			MYSQL_RES* result = mysql_store_result(m_ConnectionRequest);
 			MYSQL_ROW result_row;
 
 			std::string* log = new std::string;
@@ -72,7 +74,7 @@ void DBThread::singRequestRun() {
 				data_len = log->size();
 			}
 
-			while ((result_row = mysql_fetch_row(result)) != NULL)  
+			while ((result_row = mysql_fetch_row(result)) != NULL)
 			{
 				if (data_len > 60000) break; //길이제한 -길이 제한을 올릴려면 패킷 구조를 바꿔야한다
 
@@ -84,14 +86,14 @@ void DBThread::singRequestRun() {
 				data_len = log->size();
 			}
 
-			taskOperation->completeDBJob((char*)request->user_id, (char*)log->c_str(),data_len);
+			m_TaskOperation->completeDBJob(*request->user_id, (char*)log->c_str(), data_len);
 			delete log;
 			mysql_free_result(result);
 		}
-		
+
 		delete request->data;
 		delete request;
-		
+
 	}
 }
 
@@ -102,43 +104,43 @@ unsigned int __stdcall DBThread::messageWriteThread(void* dbThread) {
 }
 void DBThread::messageWriteRun() {
 	while (true) {
-				
+
 		std::string* requset = new std::string("insert into messageLog( date , uid , roomid , message) VALUES");
 
 		{
-			std::unique_lock<std::mutex> lock(mutex_messageWriteBuf);
-			while (messageWriteBuf.size()==0) {
-				cv_messageWriteBuf.wait(lock);
+			std::unique_lock<std::mutex> lock(m_Mutex_messageWriteBuf);
+			while (m_MessageWriteBuf.size() == 0) {
+				m_CV_messageWriteBuf.wait(lock);
 			}
 
 			MESSAGELOG* message_log;
-			while (!messageWriteBuf.empty()) {
-				message_log = messageWriteBuf.front();
-				messageWriteBuf.pop();
+			while (!m_MessageWriteBuf.empty()) {
+				message_log = m_MessageWriteBuf.front();
+				m_MessageWriteBuf.pop();
 
-				std::string sDate = std::to_string(message_log->date);
-				std::string sUser_id((char*)message_log->user_id, USERID_LEN);
-				std::string sRoom_id = std::to_string(message_log->room_id);
+				string sDate = std::to_string(message_log->date);	
+				string sRoom_id = std::to_string(message_log->room_id);
 
-				requset->append(std::string("("));
+				requset->append(string("("));
 				requset->append(sDate);
-				requset->append(std::string(", \'"));
-				requset->append(sUser_id.data());
-				requset->append(std::string("\', "));
+				requset->append(string(", \'"));
+				requset->append((*message_log->user_id).data());
+				requset->append(string("\', "));
 				requset->append(sRoom_id);
-				requset->append(std::string(", \'"));
+				requset->append(string(", \'"));
 				requset->append(message_log->message->data());
-				requset->append(std::string("\'),"));
+				requset->append(string("\'),"));
 
-				delete message_log->message;				
-				delete message_log;				
+				delete message_log->message;
+				delete message_log->user_id;
+				delete message_log;
 			}
 		}
-		
-		requset->pop_back();
-		int query_stat = mysql_query(connectionWrite, requset->data());
 
-		if (query_stat != 0){
+		requset->pop_back();
+		int query_stat = mysql_query(m_ConnectionWrite, requset->data());
+
+		if (query_stat != 0) {
 			std::cout << "Mysql connectionWrite query error \n";
 		}
 
@@ -149,56 +151,41 @@ void DBThread::messageWriteRun() {
 
 
 
-void DBThread::addMessage(char* user_id, int room_id, std::string message) {
+void DBThread::addMessage(string& _userID, int _roomID, string& message) {
 
 	MESSAGELOG* message_log = new MESSAGELOG;
-	message_log->message = new std::string;
 
-	message_log->date = get_now_time();
-	memcpy(message_log->user_id, user_id, USERID_LEN);
-	message_log->room_id = room_id;	
-	message_log->message->append(message);
-	
+	message_log->date = getNowTime();
+	message_log->user_id = new string(_userID);
+	message_log->room_id = _roomID;
+	message_log->message = &message;
+
 	{
-		std::unique_lock<std::mutex> lock(mutex_messageWriteBuf);
-		messageWriteBuf.push(message_log);
-		cv_messageWriteBuf.notify_all();
+		std::unique_lock<std::mutex> lock(m_Mutex_messageWriteBuf);
+		m_MessageWriteBuf.push(message_log);
+		m_CV_messageWriteBuf.notify_one();
 	}
 }
 
-void DBThread::getRoomLog(char* reqest_user_id, int room_id){
+void DBThread::getRoomLog(string& _reqestUserID, int _roomID) {
 	REQUEST_DATA*  request_data = new REQUEST_DATA;
 
 	std::string* request = new std::string("SELECT * FROM messagelog WHERE roomid=");
-	request->append(std::to_string(room_id));
-
-	memcpy(request_data->user_id, reqest_user_id, USERID_LEN);
-	request_data->data = request;
-	{
-		std::lock_guard<std::mutex> lock(mutex_singRequestBuf);
-		singRequestBuf.push(request_data);
-		cv_singRequestBuf.notify_all();
-	}
-	
-}
-void DBThread::getUserLog(char* reqest_user_id, char* user_id) {
-	REQUEST_DATA*  request_data = new REQUEST_DATA;
-
-	std::string* request = new std::string("SELECT * FROM messagelog WHERE uid=" );
-	request->append(std::string(user_id).data());
-
-	memcpy(request_data->user_id,reqest_user_id,USERID_LEN);
+	request->append(std::to_string(_roomID));
+	request_data->user_id = new string(_reqestUserID);
 	request_data->data = request;
 
 	{
-		std::lock_guard<std::mutex> lock(mutex_singRequestBuf);
-		singRequestBuf.push(request_data);
-		cv_singRequestBuf.notify_all();
+		std::lock_guard<std::mutex> lock(m_Mutex_SingRequestBuf);
+		m_SingRequestBuf.push(request_data);
+		m_CV_SingRequestBuf.notify_one();
 	}
+
 }
 
 
-time_t DBThread::get_now_time() {
+
+time_t DBThread::getNowTime() {
 	time_t now_time;
 
 	std::chrono::system_clock::time_point tp = std::chrono::system_clock::now();

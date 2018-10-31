@@ -1,6 +1,14 @@
 #pragma once
 
-#include "NetWorkStruct.h"
+
+
+
+#ifndef DBThread_H
+#define DBThread_H
+
+
+#include "TaskOperation.h"
+
 #include <WinSock2.h>
 #include <iostream>
 #include <string>
@@ -15,45 +23,56 @@
 #pragma comment(lib,"libmysql.lib")
 #pragma comment (lib,"ws2_32.lib")
 
+using namespace std;
+
+class TaskOperation;
 
 struct MESSAGELOG
 {
-	char* user_id[USERID_LEN];
+	string* user_id;
 	int room_id;
 	u_int64 date;
-	std::string* message;
+	string* message;
 };
 
 struct REQUEST_DATA {
-	char* user_id[USERID_LEN];
-	std::string* data;
+	string* user_id;
+	string* data;
 };
 
-#ifndef DBThread_H
-#define DBThread_H
 
-class TaskOperation;
-#include "TaskOperation.h"
 
 class DBThread
 {
+
+public:
+	DBThread();
+	~DBThread();
+
+	void Run();
+	void Init(TaskOperation& taskOperation);
+
+	void addMessage(string& _userID, int _roomID, string& message);
+	void getRoomLog(string& _reqestUserID , int _roomID);
+
+
 private:
-	TaskOperation* taskOperation;
+	TaskOperation* m_TaskOperation;
 
-	MYSQL* connectionRequest;
-	MYSQL*	connectionWrite;
-	MYSQL mysqlRequest;
-	MYSQL mysqlRequestWrite;	
+	MYSQL*	m_ConnectionRequest;
+	MYSQL*	m_ConnectionWrite;
+	MYSQL	m_MysqlRequest;
+	MYSQL	m_MysqlRequestWrite;
 
-	time_t get_now_time();
+	time_t			getNowTime();
 
-	std::queue<REQUEST_DATA*> singRequestBuf;
-	std::mutex mutex_singRequestBuf;
-	std::condition_variable cv_singRequestBuf;
+	queue<REQUEST_DATA*>	m_SingRequestBuf;
+	mutex					m_Mutex_SingRequestBuf;
+	condition_variable		m_CV_SingRequestBuf;
 
-	std::queue<MESSAGELOG*> messageWriteBuf;
-	std::mutex mutex_messageWriteBuf;
-	std::condition_variable cv_messageWriteBuf;
+	queue<MESSAGELOG*>		m_MessageWriteBuf;
+	mutex					m_Mutex_messageWriteBuf;
+	condition_variable		m_CV_messageWriteBuf;
 
 	static unsigned int __stdcall singRequestThread(void* dbThread);
 	void singRequestRun();
@@ -61,15 +80,7 @@ private:
 	static unsigned int __stdcall messageWriteThread(void* dbThread);
 	void messageWriteRun();
 
-public:
-	DBThread(TaskOperation * taskOperation);
-	~DBThread();
 
-	void Run();
-
-	void addMessage(char* user_id, int room_id, std::string message);
-	void getRoomLog(char* reqest_user_id, int room_id);
-	void getUserLog(char* reqest_user_id, char* user_id);
 };
 
 #endif

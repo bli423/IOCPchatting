@@ -1,5 +1,8 @@
 #pragma once
 
+#ifndef TaskOperation_H
+#define TaskOperation_H
+
 #include <iostream>
 #include <string>
 #include <mutex>
@@ -8,89 +11,180 @@
 #include <map>
 #include <list>
 #include <utility>
-
-#include "NetWorkStruct.h"
-
-
-#ifndef TaskOperation_H
-#define TaskOperation_H
-class IOCPServer;
-class DBThread;
-
 #include "IOCPServer.h"
+#include "UserTable.h"
+#include "User.h"
 #include "DBThread.h"
 
-struct PACKET_DATA;
 
-struct mUSER {
-	char		 id[USERID_LEN];
-	SOCKET       hClntSock;
-	SOCKADDR_IN  addr;
-	PER_IO_DATA* perIoData;
-	int			 roomId;
-	char		 status;
-};
+#define C_CONNECT			9
+#define C_CLOSE				11
+#define C_ENTER_ROOM		13
+#define C_EXIT_ROOM			14
+#define C_SOCKET_ERROR		15
+#define C_MESSAGE			4
 
-struct mROOM {
-	int rommId;
-	std::list<mUSER*> userList;
-
-};
+#define BUFFER_WARING		50000
 
 
+#define C_ROOMINFO			19
 
-class TaskOperation
+#define C_RECEIVE_ROOMINFO	20
+#define C_REQUST_ROOMINFO	21
+
+#define IN_LOBBY		0
+#define IN_ROOM			1
+
+using namespace std;
+
+class DBThread;
+
+class TaskOperation : public IOCPCallback
 {
-private:
-	IOCPServer* iocp;
-	DBThread* dbThread;
-
-	std::mutex m_Mutex;
-
-	std::queue<PACKET_DATA*> receiveBuf;
-	std::mutex mutex_receiveBuf;
-	std::condition_variable cv_receiveBuf;
-
-	std::deque<PACKET_DATA*> messageBuf;
-	std::mutex mutex_messageBuf;
-	std::condition_variable cv_messageBuf;
-
-	std::map<_int64, PACKET_DATA*> packetBuffer;
-	std::map<std::string, mUSER*> userList;
-	std::map<WORD, mROOM> roomList;
-
-	static unsigned int __stdcall receiveThread(void* taskOperation);
-	void receiveRun();
-
-
-	static unsigned int __stdcall controlThread(void* taskOperation);
-	void controlRun();
-
-	PACKET_DATA* makePacket(SOCKET hClntSock, PER_IO_DATA* perIoData, DATA_INFO* data, WORD dataLen);
 
 public:
 	TaskOperation();
 	~TaskOperation();
+		
 
+	virtual void receivePacket(Packet& packet);
+	virtual void socketClose(SOCKADDR_IN& _client);
+	
+	/*void receivePacket(Packet* _data);
+	void receiveSocketError(SOCKET _socket, SOCKADDR_IN _addr);*/
 
-	mROOM room[ROOM_COUNT];
-
-	mUSER* findUserId(SOCKADDR_IN addr);
-	mUSER* findUser(std::string id);
-	mROOM* findRoom(WORD id);
-	mUSER* registeUser(std::string id, SOCKET hClntSock, SOCKADDR_IN addr, PER_IO_DATA* perIoData);
-
-	bool removeUser(mUSER* user);
-	bool eixtUser(mUSER* user);
-	bool addRoomUser(mUSER* user, WORD roomid);
-
-	void messagePacketClear(PACKET_DATA*  packet);
-	void receivePacketClear(PACKET_DATA*  packet);
-	void sendPacketClear(PACKET_DATA*  packet);
-	void setIOCP(IOCPServer* iocp);
-	void receivePacket(PACKET_DATA* data);
-	void completeDBJob(char* requst_id,char* data, DWORD data_len) ;
 	void Run();
+	void Init(IOCPServer& _iocp);
+
+
+	void completeDBJob(string& requst_id, char* data, int data_len);
+
+private:
+	IOCPServer	*iocp;	   	
+	DBThread	*dbThread;
+
+	std::queue<Packet*>			m_ReceiveBuf;
+	std::mutex					m_Mutex_ReceiveBuf;
+	std::condition_variable		m_CV_ReceiveBuf;
+
+	std::deque<Packet*>			m_MessageBuf;
+	std::mutex					m_Mutex_MessageBuf;
+	std::condition_variable		m_CV_MessageBuf;
+
+	std::map<u_int64, Packet*>	m_PacketBuffer;
+	
+	UserTable		m_UserTable;
+
+	static unsigned int __stdcall receiveThread(void* taskOperation);
+	void receiveRun();
+
+	static unsigned int __stdcall messageThread(void* taskOperation);
+	void messageRun();
+
+
+	
 };
 
 #endif
+
+
+
+
+
+struct TotalLen_Protocol {
+	WORD totalLen;
+	WORD protocol;
+};
+struct Default_Header {
+	WORD totalLen;
+	WORD protocol;
+	char id[USERID_LEN];
+};
+
+struct C_CONNECT_Header_Ask {
+	WORD totalLen;
+	WORD protocol;
+	char id[USERID_LEN];
+};
+struct C_CONNECT_Header_Answer {
+	WORD totalLen;
+	WORD protocol;
+	char id[USERID_LEN];
+	bool canLogin;
+	char empty;
+};
+struct C_CLOSE_Header_Ask {
+	WORD totalLen;
+	WORD protocol;
+	char id[USERID_LEN];
+};
+struct C_CLOSE_Header_Answer {
+	WORD totalLen;
+	WORD protocol;
+	char id[USERID_LEN];
+	bool canLogout;
+	char empty;
+};
+
+struct C_ENTER_ROOM_Header_Ask {
+	WORD totalLen;
+	WORD protocol;
+	char id[USERID_LEN];
+	WORD roomid;
+};
+
+struct C_ENTER_ROOM_Header_Answer {
+	WORD totalLen;
+	WORD protocol;
+	char id[USERID_LEN];
+	WORD roomid;
+	bool canEnter;
+	char empty;
+};
+struct C_ROOMINFO_Header {
+	WORD totalLen;
+	WORD protocol;
+	char id[USERID_LEN];
+	WORD count;
+};
+struct C_EXIT_ROOM_Header_Ask {
+	WORD totalLen;
+	WORD protocol;
+	char id[USERID_LEN];
+};
+struct C_EXIT_ROOM_Header_Answer {
+	WORD totalLen;
+	WORD protocol;
+	char id[USERID_LEN];
+	bool canEexit;
+	char empty;
+};
+
+struct C_SOCKET_ERROR_Header {
+	WORD totalLen;
+	WORD protocol;
+	char id[USERID_LEN];
+};
+
+
+struct C_MESSAGE_Header {
+	WORD totalLen;
+	WORD protocol;
+	char id[USERID_LEN];
+	WORD messageLen;
+};
+struct C_REQUST_ROOMINFO_Header {
+	WORD totalLen;
+	WORD protocol;
+	char id[USERID_LEN];
+	WORD roomid;
+};
+
+
+
+struct C_RECEIVE_ROOMINFO_Header {
+	WORD totalLen;
+	WORD protocol;
+	char id[USERID_LEN];
+	WORD messageLen;
+};
