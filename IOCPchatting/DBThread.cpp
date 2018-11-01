@@ -142,7 +142,7 @@ void DBThread::messageWriteRun() {
 		int query_stat = mysql_query(m_ConnectionWrite, requset->data());
 
 		if (query_stat != 0) {
-			std::cout << "Mysql connectionWrite query error \n";
+			//std::cout << "Mysql connectionWrite query error \n";
 		}
 
 

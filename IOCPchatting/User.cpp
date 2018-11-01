@@ -16,6 +16,7 @@ User::User(string& _id, SOCKET _socket, SOCKADDR_IN& _clientAddr)
 
 User::~User()
 {
+
 }
 
 

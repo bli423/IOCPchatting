@@ -24,10 +24,10 @@ bool IOCPServer::Init()
 	GetSystemInfo(&systemInfo);
 
 	//work thread 생성 
-	for (int i = 0; i < systemInfo.dwNumberOfProcessors * 2; i++) {
+	for (int i = 0; i < systemInfo.dwNumberOfProcessors; i++) {
 		_beginthreadex(NULL, 0, m_WorkThread, (void*)this, 0, NULL);
 	}
-	for (int i = 0; i < systemInfo.dwNumberOfProcessors * 2; i++) {
+	for (int i = 0; i < systemInfo.dwNumberOfProcessors * 32; i++) {
 		_beginthreadex(NULL, 0, m_SendThread, (void*)this, 0, NULL);
 	}
 
@@ -98,6 +98,9 @@ void IOCPServer::acceptRun()
 			break;
 		}
 
+		//non-blocking IO 설정
+		if (ioctlsocket(clientSocket, FIONBIO, &isNonBlocking) == 0) {}
+
 		//핸들정보를 클라이언트 소켓정보로 설정
 		perHandleData = new CLIENT_DATA;
 		perIoData = new IO_DATA;
@@ -123,6 +126,7 @@ void IOCPServer::sendWork()
 {
 	
 	Packet* sendPacket;
+	ULONG  isNonBlocking = 1;
 
 	while (true)
 	{
@@ -135,18 +139,21 @@ void IOCPServer::sendWork()
 			m_SendQue.pop();
 		}
 
-		int n;
-		if ((n = m_SendQue.size()) > BUFFER_WARING)
-		{
-			if (n % 1000 == 0) std::cout << n << "send_queue warnig" << std::endl;
-		}
-
+		
 		//데이터 전송
 		char* sendData = sendPacket->getData();
-		int sendLen = sendPacket->getDataLen();
+		int sendLen = sendPacket->getDataLen();		
 
+		/*IO_DATA	*ioData = new IO_DATA;
+		memset(&ioData->overlapped, 0, sizeof(OVERLAPPED));
+		ioData->rwMode = WRITE;
+		ioData->wsaBuf.buf = sendData;
+		ioData->wsaBuf.len = sendLen;
+		
+		WSASend(sendPacket->getSocket(), &(ioData->wsaBuf), 1, &m_SendSize, m_SendFlag, &(ioData->overlapped), NULL);*/
 
-		if (send(sendPacket->getSocket(), sendData, sendLen, 0) == -1) {
+		if (send(sendPacket->getSocket(), sendData, sendLen, 0) <= 0) {
+			//closesocket(sendPacket->getSocket());
 		}
 
 		delete sendPacket;
@@ -157,8 +164,7 @@ void IOCPServer::sendWork()
 }
 
 UINT WINAPI IOCPServer::work() {
-	CLIENT_DATA		*clientData;
-	IO_DATA			*ioData;
+	
 
 	HANDLE			cp = (HANDLE)m_IOCP;
 	DWORD			bytesTransferred;
@@ -170,6 +176,8 @@ UINT WINAPI IOCPServer::work() {
 	ULONG  isNonBlocking = 1;
 
 	while (true) {
+		CLIENT_DATA		*clientData;
+		IO_DATA			*ioData;
 		// 입출력 이벤트 대기
 		GetQueuedCompletionStatus(cp, &bytesTransferred, (LPDWORD)&clientData, (LPOVERLAPPED*)&ioData, INFINITE);
 
@@ -177,17 +185,13 @@ UINT WINAPI IOCPServer::work() {
 		if (ioData->rwMode == READ) {
 			arr = nullptr;
 
-			//non-blocking IO 설정
-			if (ioctlsocket(clientData->hClntSock, FIONBIO, &isNonBlocking) == 0) {}
-
 
 			char* buffer = new char[BUFSIZE];
 			int len;
 
 
 			//비동기로 데이터를 수신한다.
-			while (true) {
-				
+			while (true) {				
 				len = recv(clientData->hClntSock, buffer, BUFSIZE, 0);
 
 				if (len <= 0) { // 전송끝
@@ -212,10 +216,7 @@ UINT WINAPI IOCPServer::work() {
 			//데이터 길이가 0이상이면 데이터 수신 성공 
 			if (dataLen>0) {
 				//패킷데이터 
-				DATA *data = new DATA;
-				data->m_arr = arr;
-				data->m_len = dataLen;
-				data->m_refCount = 1;
+				PacketData *data = new PacketData(arr, dataLen,1);
 
 				Packet *packet = new Packet(clientData->hClntSock, clientData->clntAddr, *data);			
 
@@ -237,7 +238,16 @@ UINT WINAPI IOCPServer::work() {
 			{				
 				m_Callback.socketClose(clientData->clntAddr);
 				closesocket(clientData->hClntSock);
+
+				delete clientData;
+				delete ioData;
+				continue;
+
 			}
+		}
+		if (ioData->rwMode == WRITE)
+		{
+			delete ioData;
 		}
 		
 	}
@@ -249,8 +259,14 @@ void IOCPServer::sendData(Packet& packet) {
 	{
 		std::lock_guard<std::mutex> lock(m_Mutex_SendQue);	
 		m_SendQue.push(&packet);
-		m_CV_SendQue.notify_one();
-		//WSASend(packet.getSocket(), &(sendPacket->getIoData().wsaBuf), 1, &m_SendSize, m_SendFlag, &(sendPacket->getIoData().overlapped), NULL);
+		m_CV_SendQue.notify_all();
+		//
 	}
 }
 
+
+
+int IOCPServer::getSendQueueSize()
+{
+	return m_SendQue.size();
+}

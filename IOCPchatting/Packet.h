@@ -47,11 +47,19 @@ struct IO_DATA
 	int        rwMode;
 };
 
-struct DATA
+class PacketData
 {
+public:
+	PacketData(char* _arr,int _len,int _refCount);
+	~PacketData();
+
+	bool		dispose();
+
 	char		*m_arr;
 	int			m_len;
-	int			m_refCount; //참조 카운트가 0이면 delete 가능하다.	
+	int			m_refCount;
+
+	std::mutex			m_Mutex;
 };
 
 
@@ -61,7 +69,10 @@ public:
 	Packet(
 		SOCKET	 _clientSock,
 		SOCKADDR_IN& _clientAddr,
-		DATA& _data);
+		PacketData& _data);
+	Packet(
+		SOCKET	 _clientSock,
+		PacketData& _data);
 	Packet(
 		SOCKET	 _clientSock,
 		SOCKADDR_IN& _clientAddr,
@@ -82,11 +93,10 @@ public:
 
 
 private:
-	std::mutex			m_Mutex;
 
 	SOCKET				m_Socket;
 	SOCKADDR_IN			m_ClientAddr;
-	DATA				&m_Data;
+	PacketData			&m_Data;
 };
 
 #endif

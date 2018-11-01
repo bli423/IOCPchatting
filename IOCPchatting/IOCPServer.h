@@ -37,6 +37,8 @@ public:
 
 	void sendData(Packet& packet);
 
+	int getSendQueueSize();
+
 private:
 	HANDLE			m_IOCP;
 	SOCKET			m_ServerSocket;

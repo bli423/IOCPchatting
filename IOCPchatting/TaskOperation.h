@@ -59,6 +59,9 @@ public:
 
 	void completeDBJob(string& requst_id, char* data, int data_len);
 
+	int getMessageBufSize();
+	int getUserTableSize();
+
 private:
 	IOCPServer	*iocp;	   	
 	DBThread	*dbThread;

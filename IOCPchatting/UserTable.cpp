@@ -7,6 +7,7 @@ UserTable::UserTable()
 	for(int i=0; i<100; i++)
 	{
 		m_RoomList[i] = new Room(i);
+		
 	}
 }
 
@@ -106,6 +107,7 @@ bool UserTable::removeUser(User& _user)
 		if (_user.isRemove())
 		{
 			m_UserList.erase(_user.getID());
+			delete &_user;
 		}
 	}
 	else
@@ -134,7 +136,23 @@ bool UserTable::eixtUserToRoom(User& _user)
 		m_RoomList[roomID]->deletetUser(_user);
 	}
 
+	
+
 	return true;
+}
+
+SOCKET* UserTable::getUserListInRoom(User& _user, int* _size)
+{
+	unique_lock<mutex> lock(m_Mutex);
+
+	
+	int roomID = _user.getmRoomID();
+	*_size = m_RoomList[roomID]->getNumberOfUser();
+
+	SOCKET* result = new SOCKET[*_size];
+	memcpy(result, m_RoomList[roomID]->getSocketList(), sizeof(SOCKET)*(*_size));
+
+	return  result;
 }
 
 void UserTable::sendMessageToAllRoomUser(User& _user, char* _data, int _dataLen)
@@ -143,29 +161,23 @@ void UserTable::sendMessageToAllRoomUser(User& _user, char* _data, int _dataLen)
 	int roomID = _user.getmRoomID();
 	int refSize = m_RoomList[roomID]->getNumberOfUser();
 
-	DATA *data = new DATA;
+	PacketData *data = new PacketData(_data, _dataLen, refSize);
 	data->m_arr = _data;
 	data->m_len = _dataLen;
 	data->m_refCount = refSize;
 
-	set<User*>::iterator itor = m_RoomList[roomID]->getUserIterator();
+/*	list<User*>::iterator itor = m_RoomList[roomID]->getUserIterator();
+	list<User*>::iterator end = m_RoomList[roomID]->getIteratorEnd();
 
-	for (; itor != m_RoomList[roomID]->getIteratorEnd(); itor++)
+	for (;itor != end; itor++)
 	{		
-		Packet *packet = new Packet((*itor)->getSocket(), (*itor)->getClientAddr(), *data);
+		Packet *packet = new Packet((*itor)->getSocket(), *data);
 		m_IOCP->sendData(*packet);
-	}
-
+	}*/
 }
-void UserTable::sendMessageToUser(User& _user, char* _data, int _dataLen)
+
+
+int UserTable::getUserListSize()
 {
-	lock_guard<mutex> lock(m_Mutex);
-
-	DATA *data = new DATA;
-	data->m_arr = _data;
-	data->m_len = _dataLen;
-	data->m_refCount = 1;
-
-	Packet *packet = new Packet(_user.getSocket(), _user.getClientAddr(), *data);
-	m_IOCP->sendData(*packet);
+	return m_UserList.size();
 }

@@ -47,8 +47,6 @@ void TaskOperation::socketClose(SOCKADDR_IN& _client)
 {
 	User *user = m_UserTable.getUserOrNULL(_client);
 
-	cout << "socket error" << endl;
-
 	if (user != NULL)
 	{
 		m_UserTable.eixtUserToRoom(*user);
@@ -178,7 +176,6 @@ void TaskOperation::messageRun() {
 			m_MessageBuf.pop_front();
 		}
 
-		if (m_MessageBuf.size() > BUFFER_WARING) std::cout << "messageBuf warnig\n" <<std::endl;			
 
 		Default_Header* default_header;
 		default_header = (Default_Header*)packet->getData();
@@ -204,7 +201,9 @@ void TaskOperation::messageRun() {
 			memcpy(connect_answer->id, userid.c_str(), USERID_LEN);	
 			connect_answer->canLogin = canLogin;
 
-			m_UserTable.sendMessageToUser(*user, data, totalLen);
+		
+			Packet *sendPacket = new Packet(user->getSocket(), user->getClientAddr(), data, totalLen);
+			iocp->sendData(*sendPacket);
 		
 		}
 
@@ -233,7 +232,8 @@ void TaskOperation::messageRun() {
 			{
 				close_answer->canLogout = true;
 
-				m_UserTable.sendMessageToUser(*user, data, totalLen);
+				Packet *sendPacket = new Packet(packet->getSocket(), packet->getClientAddr(), data, totalLen);
+				iocp->sendData(*sendPacket);
 			}
 
 					
@@ -275,7 +275,9 @@ void TaskOperation::messageRun() {
 				enter_room_answer->roomid = roomid;
 				enter_room_answer->canEnter = isEnter;
 				
-				m_UserTable.sendMessageToUser(*user, data, totalLen);				
+				//m_UserTable.sendMessageToUser(*user, data, totalLen);			
+				Packet *sendPacket = new Packet(user->getSocket(), user->getClientAddr(), data, totalLen);
+				iocp->sendData(*sendPacket);
 			}
 			else {///입장 거부
 				WORD totalLen = sizeof(C_ENTER_ROOM_Header_Answer);
@@ -288,8 +290,8 @@ void TaskOperation::messageRun() {
 				enter_room_answer->roomid = roomid;
 				enter_room_answer->canEnter = isEnter;			
 
-				Packet *sendPacket = new Packet(packet->getSocket(), packet->getClientAddr(), data, totalLen);
-				iocp->sendData(*sendPacket);				
+				Packet *sendPacket = new Packet(user->getSocket(), user->getClientAddr(), data, totalLen);
+				iocp->sendData(*sendPacket);
 			}	
 
 			//user 접근 반환
@@ -322,13 +324,29 @@ void TaskOperation::messageRun() {
 				if (roomid != -1)
 				{
 					exit_room_answer->canEexit = true;
-					m_UserTable.sendMessageToAllRoomUser(*user, data, totalLen);
+
+					int size;
+					SOCKET* list = m_UserTable.getUserListInRoom(*user, &size);
+
+					PacketData *send_data = new PacketData(data, totalLen, size);
+
+					for (int i = 0; i < size; i++)
+					{
+						Packet *packet = new Packet(list[i], *send_data);
+						iocp->sendData(*packet);
+					}
+
+					delete list;
+					//m_UserTable.sendMessageToAllRoomUser(*user, data, totalLen);
+
 					m_UserTable.eixtUserToRoom(*user);
 				}
 				else
 				{
 					exit_room_answer->canEexit = false;
-					m_UserTable.sendMessageToUser(*user, data, totalLen);
+					//m_UserTable.sendMessageToUser(*user, data, totalLen);
+					Packet *sendPacket = new Packet(user->getSocket(), user->getClientAddr(), data, totalLen);
+					iocp->sendData(*sendPacket);
 				}
 			}			
 
@@ -366,6 +384,19 @@ void TaskOperation::messageRun() {
 				dbThread->addMessage(userid, user->getmRoomID(), *message);
 
 				m_UserTable.sendMessageToAllRoomUser(*user, data, totalLen);
+
+				int size;
+				SOCKET* list = m_UserTable.getUserListInRoom(*user,&size);
+
+				PacketData *send_data = new PacketData(data, totalLen, size);
+
+				for (int i=0; i< size; i++)
+				{
+					Packet *packet = new Packet(list[i], *send_data);
+					iocp->sendData(*packet);
+				}
+
+				delete list;
 			}
 
 			//user 접근 반환
@@ -408,11 +439,23 @@ void TaskOperation::completeDBJob(string& _requstID, char* _data, int _data_len)
 		memcpy(&send_data[sizeof(C_RECEIVE_ROOMINFO_Header)], _data, _data_len);
 
 
-		m_UserTable.sendMessageToUser(*user, send_data, totalLen);
+		//m_UserTable.sendMessageToUser(*user, send_data, totalLen);
+		Packet *sendPacket = new Packet(user->getSocket(), user->getClientAddr(), send_data, totalLen);
+		iocp->sendData(*sendPacket);
 	}
 
 	//user 접근 반환
 	if (user != NULL) {
 		m_UserTable.returnUser(*user);
 	}
+}
+
+
+int TaskOperation::getMessageBufSize()
+{
+	return m_MessageBuf.size();
+}
+int TaskOperation::getUserTableSize()
+{
+	return m_UserTable.getUserListSize();
 }

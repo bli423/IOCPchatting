@@ -4,7 +4,7 @@
 #ifndef ROOM_HEADER
 #define ROOM_HEADER
 
-#include <set>
+#include <list>
 #include "User.h"
 
 class Room
@@ -17,13 +17,15 @@ public:
 	void	deletetUser(User& user);
 
 	int		getRoomID();
-	int		getNumberOfUser();
-	set<User*>::iterator getUserIterator();
-	set<User*>::iterator getIteratorEnd();
+	int		getNumberOfUser();	
+
+	SOCKET*		getSocketList();
 
 private:
 	int m_RoomID;
-	std::set<User*> m_UserList;
+	list<User*> m_UserList;
+
+	SOCKET*		m_SocketList;
 };
 
 #endif 

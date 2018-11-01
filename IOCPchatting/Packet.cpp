@@ -2,39 +2,63 @@
 #include "Packet.h"
 
 
-Packet::Packet(
-	SOCKET	 _clientSock,
-	SOCKADDR_IN& _clientAddr,
-	DATA& _data) : m_Data(_data)
+
+
+PacketData::PacketData(char* _arr, int _len, int _refCount)
 {
-	m_Socket = _clientSock;
-	memcpy(&m_ClientAddr,&_clientAddr,sizeof(SOCKADDR_IN));	
+	m_arr = _arr;
+	m_len = _len;
+	m_refCount = _refCount;
 }
+PacketData::~PacketData()
+{
+	
+}
+bool PacketData::dispose()
+{
+	std::lock_guard<std::mutex> lock(m_Mutex);
+	m_refCount -= 1;
+
+	if (m_refCount <= 0)
+	{
+		delete m_arr;
+		return true;
+	}
+	return false;
+}
+
+
+
 
 Packet::Packet(
 	SOCKET	 _clientSock,
 	SOCKADDR_IN& _clientAddr,
+	PacketData& _data) : m_Data(_data)
+{
+	m_Socket = _clientSock;
+	memcpy(&m_ClientAddr,&_clientAddr,sizeof(SOCKADDR_IN));	
+}
+Packet::Packet(
+	SOCKET	 _clientSock,
+	PacketData& _data) : m_Data(_data)
+{
+	m_Socket = _clientSock;
+}
+Packet::Packet(
+	SOCKET	 _clientSock,
+	SOCKADDR_IN& _clientAddr,
 	char* _arr,
-	int _len) : m_Data(*(new DATA))
+	int _len) : m_Data(*(new PacketData(_arr, _len,1)))
 {
 	m_Socket = _clientSock;
 	memcpy(&m_ClientAddr, &_clientAddr, sizeof(SOCKADDR_IN));
-	m_Data.m_arr = _arr;
-	m_Data.m_len = _len;
-	m_Data.m_refCount = 1;
 }
 
 
 Packet::~Packet()
 {
-	std::lock_guard<std::mutex> lock(m_Mutex);
-	m_Data.m_refCount -= 1;
-
-	if (m_Data.m_refCount <= 0)
-	{
-		delete m_Data.m_arr;
-		delete &m_Data;			
-	}
+	if(m_Data.dispose()) delete &m_Data;
+	
 }
 
 char* Packet::getData()
@@ -84,18 +108,14 @@ void Packet::merge(Packet& _additionalPacket)
 
 Packet&	Packet::cutInTwo(int _position)
 {
-	Packet	*cutPacket;
-	DATA	*cutData = new DATA;
+	Packet		*cutPacket;
+	
 	char	*cutArr = new char[m_Data.m_len - _position];
-
-	cutData->m_len = m_Data.m_len - _position;
 	memcpy(cutArr, &m_Data.m_arr[_position], m_Data.m_len - _position);
-	cutData->m_arr = cutArr;
-	cutData->m_refCount = 1;
-		
+
+	PacketData	*cutData = new PacketData(cutArr, m_Data.m_len - _position,1);
 
 	m_Data.m_len = _position;
-
 	
 	cutPacket = new Packet(m_Socket, m_ClientAddr,*cutData);
 

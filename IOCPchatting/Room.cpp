@@ -7,6 +7,7 @@
 Room::Room(int _id)
 {
 	m_RoomID = _id;
+	m_SocketList = new SOCKET[0];
 }
 
 
@@ -16,13 +17,44 @@ Room::~Room()
 
 
 void Room::insertUser(User& _user)
-{
-	m_UserList.insert(&_user);
+{	
+	m_UserList.push_back(&_user);
+
+
+	int size = m_UserList.size();
+	delete m_SocketList;
+	m_SocketList = new SOCKET[size];
+	
+	list<User*>::iterator itor = m_UserList.begin();
+	list<User*>::iterator end = m_UserList.end();
+
+	int n = 0;
+	for (; itor != end; itor++)
+	{
+		m_SocketList[n] = (*itor)->getSocket();
+		n++;
+	}
+
 }
 
 void Room::deletetUser(User& _user)
 {
-	m_UserList.erase(&_user);
+
+	m_UserList.remove(&_user);
+
+	int size = m_UserList.size();
+	delete m_SocketList;
+	m_SocketList = new SOCKET[size];
+
+	list<User*>::iterator itor = m_UserList.begin();
+	list<User*>::iterator end = m_UserList.end();
+
+	int n = 0;
+	for (; itor != end; itor++)
+	{
+		m_SocketList[n] = (*itor)->getSocket();
+		n++;
+	}
 }
 
 int	Room::getRoomID()
@@ -34,14 +66,7 @@ int	Room::getNumberOfUser()
 	return m_UserList.size();
 }
 
-set<User*>::iterator Room::getUserIterator()
+SOCKET*	Room::getSocketList()
 {
-	return m_UserList.begin();
-
-	
-}
-
-set<User*>::iterator Room::getIteratorEnd()
-{
-	return m_UserList.end();
+	return m_SocketList;
 }

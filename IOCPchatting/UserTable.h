@@ -33,15 +33,18 @@ public:
 	bool enterUserToRoom(User& user,int _roomID);
 	bool eixtUserToRoom(User& _user);
 
+	SOCKET* getUserListInRoom(User& _user, int* _size);
+
 	void sendMessageToAllRoomUser(User& _user,char* _data, int _dataLen);
-	void sendMessageToUser(User& _user, char* _data, int _dataLen);
+	//void sendMessageToUser(User& _user, char* _data, int _dataLen);
+
+	int getUserListSize();
 
 private:
 	IOCPServer				*m_IOCP;
 
 	map<string, User*>		m_UserList;
 	Room					*m_RoomList[100];
-
 
 	mutex					m_Mutex;
 };
