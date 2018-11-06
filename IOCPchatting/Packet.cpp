@@ -12,7 +12,7 @@ PacketData::PacketData(char* _arr, int _len, int _refCount)
 }
 PacketData::~PacketData()
 {
-	delete[]m_arr;
+	delete [m_len]m_arr;
 }
 bool PacketData::dispose()
 {
@@ -32,35 +32,42 @@ bool PacketData::dispose()
 Packet::Packet(
 	SOCKET	 _clientSock,
 	SOCKADDR_IN& _clientAddr,
-	PacketData& _data) : m_Data(_data)
+	PacketData& _data)
 {
 	m_Socket = _clientSock;
 	memcpy(&m_ClientAddr, &_clientAddr, sizeof(SOCKADDR_IN));
+	m_Data = &_data;
 }
 Packet::Packet(
 	SOCKET	 _clientSock,
-	PacketData& _data) : m_Data(_data)
+	PacketData& _data) 
 {
 	m_Socket = _clientSock;
+	memset(&m_ClientAddr, 0, sizeof(SOCKADDR_IN));
+	m_Data = &_data;
 }
 
 
 Packet::~Packet()
 {
-	if (m_Data.dispose())
+	if (m_Data != NULL) 
 	{
-		delete &m_Data;
+		if (m_Data->dispose())
+		{
+			delete m_Data;
+		}
 	}
+	
 		
 }
 
 char* Packet::getData()
 {
-	return m_Data.m_arr;
+	return m_Data->m_arr;
 }
 int	Packet::getDataLen()
 {
-	return m_Data.m_len;
+	return m_Data->m_len;
 }
 SOCKET Packet::getSocket()
 {
@@ -85,15 +92,15 @@ u_int64	Packet::getIPandPORT()
 void Packet::merge(Packet& _additionalPacket)
 {
 
-	char	*tempArr = m_Data.m_arr;
-	int		newDataLen = m_Data.m_len + _additionalPacket.getDataLen();
+	char	*tempArr = m_Data->m_arr;
+	int		newDataLen = m_Data->m_len + _additionalPacket.getDataLen();
 	char	*newArr = new char[newDataLen];
 
-	memcpy(newArr, m_Data.m_arr, m_Data.m_len);
-	memcpy(&newArr[m_Data.m_len], _additionalPacket.getData(), _additionalPacket.getDataLen());
+	memcpy(newArr, m_Data->m_arr, m_Data->m_len);
+	memcpy(&newArr[m_Data->m_len], _additionalPacket.getData(), _additionalPacket.getDataLen());
 
-	m_Data.m_arr = newArr;
-	m_Data.m_len = newDataLen;
+	m_Data->m_arr = newArr;
+	m_Data->m_len = newDataLen;
 
 	delete tempArr;
 }
@@ -103,12 +110,12 @@ Packet&	Packet::cutInTwo(int _position)
 {
 	Packet		*cutPacket;
 
-	char	*cutArr = new char[m_Data.m_len - _position];
-	memcpy(cutArr, &m_Data.m_arr[_position], m_Data.m_len - _position);
+	char	*cutArr = new char[m_Data->m_len - _position];
+	memcpy(cutArr, &m_Data->m_arr[_position], m_Data->m_len - _position);
 
-	PacketData	*cutData = new PacketData(cutArr, m_Data.m_len - _position, 1);
+	PacketData	*cutData = new PacketData(cutArr, m_Data->m_len - _position, 1);
 
-	m_Data.m_len = _position;
+	m_Data->m_len = _position;
 
 	cutPacket = new Packet(m_Socket, m_ClientAddr, *cutData);
 

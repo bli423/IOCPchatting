@@ -151,6 +151,7 @@ void IOCPServer::sendWork()
 		ioData->wsaBuf.buf = sendData;
 		ioData->wsaBuf.len = sendLen;
 		ioData->packet = sendPacket;
+		ioData->len = 0;
 		ioData->rwMode = WRITE;
 
 
@@ -158,11 +159,14 @@ void IOCPServer::sendWork()
 
 		if (result != 0)
 		{
-			delete ioData->packet;
-			delete ioData;
 			if (result == SOCKET_ERROR)
 			{
-				//closesocket(sendPacket->getSocket());
+				std::lock_guard<std::mutex> lock(test);
+				if (ioData->overlapped.Offset == 0)
+				{
+					delete ioData->packet;
+					delete ioData;
+				}
 			}
 			else {
 				std::cout << result << " error " << std::endl;
@@ -170,14 +174,11 @@ void IOCPServer::sendWork()
 		}
 
 
-		/*if (send(sendPacket->getSocket(), sendData, sendLen, 0) <= 0) {
-
-		}
-		delete sendPacket;*/
-
 
 		count_send++;
 	}
+
+	std::cout <<  " sendWork " << std::endl;
 }
 
 UINT WINAPI IOCPServer::work() {
@@ -198,6 +199,8 @@ UINT WINAPI IOCPServer::work() {
 		// 입출력 이벤트 대기
 		GetQueuedCompletionStatus(cp, &bytesTransferred, (LPDWORD)&clientData, (LPOVERLAPPED*)&ioData, INFINITE);
 
+		if (ioData == nullptr) 
+			continue;
 
 		if (ioData->rwMode == READ) {
 			arr = nullptr;
@@ -253,22 +256,41 @@ UINT WINAPI IOCPServer::work() {
 			//데이터 길이가 0이면 소켓 연결 종료
 			else
 			{
-				m_Callback.socketClose(clientData->clntAddr);
-				closesocket(clientData->hClntSock);
+				
+				{
+					std::lock_guard<std::mutex> lock(test);
 
-				delete clientData;
-				delete &ioData->overlapped;
-				continue;
+					SOCKET deleteSocket = clientData->hClntSock;
+					if (deleteSocket != 0xddddddddL)
+					{
+						m_Callback.socketClose(clientData->clntAddr);
+						delete clientData;						
+
+						closesocket(deleteSocket);						
+					}
+					if (ioData->overlapped.Offset == 0L)
+					{
+						delete ioData;
+					}					
+
+					continue;
+				}
+				
 			}
 		}
 		else if (ioData->rwMode == WRITE)
 		{
-
-			delete ioData->packet;
-			delete ioData;
+			std::lock_guard<std::mutex> lock(test);
+			if (ioData->overlapped.Offset == 0)
+			{
+				delete ioData->packet;
+				delete ioData;
+			}			
 		}
 
 	}
+
+
 	return 0;
 }
 

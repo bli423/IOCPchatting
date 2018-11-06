@@ -61,6 +61,9 @@ private:
 	std::mutex					m_Mutex_SendQue;
 	std::condition_variable		m_CV_SendQue;
 
+	std::mutex					test;
+	std::mutex					readError;
+
 	int c;
 	int count[8];
 };

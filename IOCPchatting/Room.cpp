@@ -82,16 +82,19 @@ char* Room::getChat(int* _len)
 	int len = 0;
 	int size;
 
-	CHAT_NODE**	list;
-
+	
+	
 	if (m_Chat.size() > 0)
 	{
+		CHAT_NODE**	list;
+		int n = 0;
 		{
 			lock_guard<mutex> lock(m_Mutex);
+
 			size = m_Chat.size();
 			list = new CHAT_NODE*[size];
 
-			int n = 0;
+			
 			while (!m_Chat.empty()) {
 				list[n] = m_Chat.front();
 				m_Chat.pop_front();
@@ -108,16 +111,18 @@ char* Room::getChat(int* _len)
 		{
 			memcpy(&data[position_len], list[i]->data, list[i]->len);
 
+			int tempLen = list[i]->len;
 			position_len += list[i]->len;
 
-			delete []list[i]->data;
+			delete [tempLen]list[i]->data;
 			delete list[i];
 		}
 
-		delete []list;
+		delete [n]list;
 
 		*_len = len;
 		return data;
+
 	}
 	else
 	{

@@ -336,7 +336,7 @@ void TaskOperation::messageRun() {
 					int listSize;
 					SOCKET* list = m_UserTable.getUserListInRoom(*user, &listSize);
 					iocp->sendData(list, listSize, data, totalLen);
-					delete list;
+					delete [listSize]list;
 
 					m_UserTable.eixtUserToRoom(*user);
 				}
@@ -377,8 +377,8 @@ void TaskOperation::messageRun() {
 				m_UserTable.addChats(user->getmRoomID(), data, totalLen);
 
 				//DB에 로그 저장
-				string *message = new string(&packet->getData()[sizeof(C_MESSAGE_Header)], message_len);
-				dbThread->addMessage(userid, user->getmRoomID(), *message);
+				/*string *message = new string(&packet->getData()[sizeof(C_MESSAGE_Header)], message_len);
+				dbThread->addMessage(userid, user->getmRoomID(), *message);*/
 			}
 
 			//user 접근 반환

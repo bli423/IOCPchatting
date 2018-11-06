@@ -29,10 +29,10 @@ class TaskOperation;
 
 struct MESSAGELOG
 {
-	string* user_id;
+	string user_id;
 	int room_id;
 	u_int64 date;
-	string* message;
+	string message;
 };
 
 struct REQUEST_DATA {

@@ -98,7 +98,7 @@ private:
 
 	SOCKET				m_Socket;
 	SOCKADDR_IN			m_ClientAddr;
-	PacketData			&m_Data;
+	PacketData			*m_Data;
 };
 
 

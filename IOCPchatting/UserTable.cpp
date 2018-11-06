@@ -52,9 +52,10 @@ User* UserTable::getUserOrNULL(SOCKADDR_IN& _clientAddr)
 
 	for (; itor != m_UserList.end(); itor++)
 	{
-		if ((*itor).second->isEqual(_clientAddr))
-		{			
-			User* user = (*itor).second;
+		User* user = (*itor).second;
+
+		if (user->isEqual(_clientAddr))
+		{						
 			if (user->canAccess())
 			{
 				user->getAccess();

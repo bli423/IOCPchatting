@@ -41,6 +41,7 @@ void DBThread::Run() {
 unsigned int __stdcall DBThread::singRequestThread(void* dbThread) {
 	DBThread* this_dbThread = static_cast<DBThread*>(dbThread);
 	this_dbThread->singRequestRun();
+	std::cout << " singRequestRun " << std::endl;
 	return 0;
 }
 
@@ -100,6 +101,7 @@ void DBThread::singRequestRun() {
 unsigned int __stdcall DBThread::messageWriteThread(void* dbThread) {
 	DBThread* this_dbThread = static_cast<DBThread*>(dbThread);
 	this_dbThread->messageWriteRun();
+	std::cout << " messageWriteRun " << std::endl;
 	return 0;
 }
 void DBThread::messageWriteRun() {
@@ -110,7 +112,7 @@ void DBThread::messageWriteRun() {
 
 		{
 			std::unique_lock<std::mutex> lock(m_Mutex_messageWriteBuf);
-			while (m_MessageWriteBuf.size() < 5) {
+			while (m_MessageWriteBuf.size() < 0) {
 				m_CV_messageWriteBuf.wait(lock);
 			}
 
@@ -122,18 +124,16 @@ void DBThread::messageWriteRun() {
 				string sDate = std::to_string(message_log->date);	
 				string sRoom_id = std::to_string(message_log->room_id);
 
-				requset->append(string("("));
-				requset->append(sDate);
-				requset->append(string(", \'"));
-				requset->append((*message_log->user_id).data());
-				requset->append(string("\', "));
-				requset->append(sRoom_id);
-				requset->append(string(", \'"));
-				requset->append(message_log->message->data());
-				requset->append(string("\'),"));
-
-				delete message_log->message;
-				delete message_log->user_id;
+				*requset += string("(");
+				*requset += (sDate);
+				*requset += (string(", \'"));
+				*requset += ((message_log->user_id).data());
+				*requset += (string("\', "));
+				*requset += (sRoom_id);
+				*requset += (string(", \'"));
+				*requset += (message_log->message);
+				*requset += (string("\'),"));
+		
 				delete message_log;
 			}
 		}
@@ -144,8 +144,6 @@ void DBThread::messageWriteRun() {
 		if (query_stat != 0) {
 			//std::cout << "Mysql connectionWrite query error \n";
 		}
-
-
 		delete requset;
 	}
 }
@@ -157,15 +155,18 @@ void DBThread::addMessage(string& _userID, int _roomID, string& message) {
 	MESSAGELOG* message_log = new MESSAGELOG;
 
 	message_log->date = getNowTime();
-	message_log->user_id = new string(_userID);
+	message_log->user_id = _userID;
 	message_log->room_id = _roomID;
-	message_log->message = &message;
+	message_log->message = message;
 
+	delete &message;
 	{
 		std::unique_lock<std::mutex> lock(m_Mutex_messageWriteBuf);
 		m_MessageWriteBuf.push(message_log);
 		m_CV_messageWriteBuf.notify_one();
 	}
+
+	
 }
 
 void DBThread::getRoomLog(string& _reqestUserID, int _roomID) {
