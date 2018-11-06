@@ -7,6 +7,13 @@
 #include <list>
 #include "User.h"
 
+struct CHAT_NODE
+{
+	char*	data;
+	int		len;
+};
+
+
 class Room
 {
 public:
@@ -21,11 +28,15 @@ public:
 
 	SOCKET*		getSocketList();
 
-private:
-	int m_RoomID;
-	list<User*> m_UserList;
+	void	addChat(CHAT_NODE& _chat);
+	char*	getChat(int* _len);
 
-	SOCKET*		m_SocketList;
+private:
+	int		m_RoomID;
+	list<User*>		m_UserList;
+	SOCKET*			m_SocketList;
+	mutex			m_Mutex;
+	list<CHAT_NODE*> m_Chat;
 };
 
 #endif 

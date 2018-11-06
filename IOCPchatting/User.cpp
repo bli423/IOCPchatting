@@ -4,9 +4,9 @@
 
 User::User(string& _id, SOCKET _socket, SOCKADDR_IN& _clientAddr)
 {
-	m_ID.append(_id);
+	m_ID = _id;
 	m_Socket = _socket;
-	memcpy(&m_ClientAddr, &_clientAddr, sizeof(IO_DATA));
+	memcpy(&m_ClientAddr, &_clientAddr, sizeof(SOCKADDR_IN));
 
 	m_RoomID = -1;
 	m_Status = DISCONNECT_USER;
@@ -16,7 +16,7 @@ User::User(string& _id, SOCKET _socket, SOCKADDR_IN& _clientAddr)
 
 User::~User()
 {
-
+	int a = 0;
 }
 
 

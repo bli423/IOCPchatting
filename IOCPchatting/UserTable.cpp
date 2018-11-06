@@ -75,6 +75,7 @@ void UserTable::returnUser(User& _user)
 	_user.returnAccess();
 	if (_user.isRemove()) {
 		m_UserList.erase(_user.getID());
+		delete &_user;
 	}
 }
 
@@ -109,6 +110,7 @@ bool UserTable::removeUser(User& _user)
 			m_UserList.erase(_user.getID());
 			delete &_user;
 		}
+		
 	}
 	else
 	{
@@ -155,29 +157,48 @@ SOCKET* UserTable::getUserListInRoom(User& _user, int* _size)
 	return  result;
 }
 
-void UserTable::sendMessageToAllRoomUser(User& _user, char* _data, int _dataLen)
-{
-	unique_lock<mutex> lock(m_Mutex);
-	int roomID = _user.getmRoomID();
-	int refSize = m_RoomList[roomID]->getNumberOfUser();
-
-	PacketData *data = new PacketData(_data, _dataLen, refSize);
-	data->m_arr = _data;
-	data->m_len = _dataLen;
-	data->m_refCount = refSize;
-
-/*	list<User*>::iterator itor = m_RoomList[roomID]->getUserIterator();
-	list<User*>::iterator end = m_RoomList[roomID]->getIteratorEnd();
-
-	for (;itor != end; itor++)
-	{		
-		Packet *packet = new Packet((*itor)->getSocket(), *data);
-		m_IOCP->sendData(*packet);
-	}*/
-}
 
 
 int UserTable::getUserListSize()
 {
 	return m_UserList.size();
+}
+
+
+void UserTable::addChats(int _roomID, char* _data, int _len)
+{
+	CHAT_NODE *chat = new CHAT_NODE;
+	chat->data = _data;
+	chat->len = _len;
+
+	m_RoomList[_roomID]->addChat(*chat);
+}
+
+
+void UserTable::sendChats()
+{
+	for (int i = 0; i < NUM_OF_ROOM; i++)
+	{
+		int len = 0;
+		char* data = m_RoomList[i]->getChat(&len);
+		if (len > 0)
+		{
+			int size = 0;
+			SOCKET* socketList;
+			{
+				unique_lock<mutex> lock(m_Mutex);
+				size = m_RoomList[i]->getNumberOfUser();
+
+				socketList = new SOCKET[size];
+				memcpy(socketList, m_RoomList[i]->getSocketList(), sizeof(SOCKET)*(size));
+			}
+			m_IOCP->sendData(socketList, size, data, len);
+
+			delete []socketList;
+		}
+		else
+		{
+			delete data;
+		}
+	}
 }

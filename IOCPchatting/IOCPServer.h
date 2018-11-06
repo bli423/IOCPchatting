@@ -10,6 +10,7 @@
 #include <winsock2.h>
 #include <queue>
 #include <mutex>
+#include <unordered_map>
 #include "Packet.h"
 
 #define PORT        9999
@@ -36,26 +37,32 @@ public:
 	void sendWork();
 
 	void sendData(Packet& packet);
+	void sendData(SOCKET* _targetList, int _listSize, char* _data, int _dataSize);
+	void sendData(SOCKET _target, char* _data, int _dataSize);
 
 	int getSendQueueSize();
+	int getBufferFilledQueSize();
+
+
+	int getCount();
+	void setCount();
 
 private:
 	HANDLE			m_IOCP;
 	SOCKET			m_ServerSocket;
 	SOCKADDR_IN		m_ServerAddr;
 
-	
 
 	IOCPCallback	&m_Callback;
 
-	DWORD m_SendFlag;
-	DWORD m_SendSize;
 
 	// 패킷을 전송하기전 대기하는 큐
-	std::queue<Packet*>		m_SendQue;
-	std::mutex				m_Mutex_SendQue;
+	std::queue<Packet*>			m_SendQue;
+	std::mutex					m_Mutex_SendQue;
 	std::condition_variable		m_CV_SendQue;
 
+	int c;
+	int count[8];
 };
 
 #endif 

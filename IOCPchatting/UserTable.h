@@ -10,7 +10,7 @@
 #include <string>
 #include <map>
 
-#define ROOM_COUNT		100
+#define NUM_OF_ROOM		100
 
 using namespace std;
 
@@ -35,8 +35,9 @@ public:
 
 	SOCKET* getUserListInRoom(User& _user, int* _size);
 
-	void sendMessageToAllRoomUser(User& _user,char* _data, int _dataLen);
-	//void sendMessageToUser(User& _user, char* _data, int _dataLen);
+
+	void addChats(int roomID, char* data, int len);
+	void sendChats();
 
 	int getUserListSize();
 
@@ -44,7 +45,7 @@ private:
 	IOCPServer				*m_IOCP;
 
 	map<string, User*>		m_UserList;
-	Room					*m_RoomList[100];
+	Room					*m_RoomList[NUM_OF_ROOM];
 
 	mutex					m_Mutex;
 };

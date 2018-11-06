@@ -2,7 +2,8 @@
 #include "IOCPServer.h"
 
 IOCPServer::IOCPServer(IOCPCallback& _callback) : m_Callback(_callback)
-{	
+{
+	c = 0;
 }
 IOCPServer::~IOCPServer()
 {
@@ -15,7 +16,7 @@ bool IOCPServer::Init()
 	WSAData wsaData;
 	SYSTEM_INFO systemInfo;
 
-	if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {		
+	if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
 		return false;
 	}
 	//cp 생성
@@ -27,13 +28,13 @@ bool IOCPServer::Init()
 	for (int i = 0; i < systemInfo.dwNumberOfProcessors; i++) {
 		_beginthreadex(NULL, 0, m_WorkThread, (void*)this, 0, NULL);
 	}
-	for (int i = 0; i < systemInfo.dwNumberOfProcessors * 32; i++) {
+	for (int i = 0; i < systemInfo.dwNumberOfProcessors; i++) {
 		_beginthreadex(NULL, 0, m_SendThread, (void*)this, 0, NULL);
 	}
 
 	//서버 listen 소켓 생성
 	m_ServerSocket = WSASocket(PF_INET, SOCK_STREAM, 0, NULL, 0, WSA_FLAG_OVERLAPPED);
-	if (m_ServerSocket == INVALID_SOCKET) {		
+	if (m_ServerSocket == INVALID_SOCKET) {
 		return false;
 	}
 
@@ -41,13 +42,13 @@ bool IOCPServer::Init()
 	memset(&m_ServerAddr, 0, sizeof(SOCKADDR_IN));
 	m_ServerAddr.sin_family = PF_INET;
 	m_ServerAddr.sin_addr.s_addr = htonl(INADDR_ANY);
-	m_ServerAddr.sin_port = htons(PORT);	
+	m_ServerAddr.sin_port = htons(PORT);
 	if (bind(m_ServerSocket, (SOCKADDR*)&m_ServerAddr, sizeof(SOCKADDR_IN)) == SOCKET_ERROR) {
 		return false;
 	}
 
 	// 서버 소켓 listen 설정
-	if (listen(m_ServerSocket, BACKLOG) == SOCKET_ERROR) {	
+	if (listen(m_ServerSocket, BACKLOG) == SOCKET_ERROR) {
 		return false;
 	}
 
@@ -111,6 +112,7 @@ void IOCPServer::acceptRun()
 		//iocp와 소켓 연결
 		CreateIoCompletionPort((HANDLE)perHandleData->hClntSock, m_IOCP, (DWORD)perHandleData, 0);
 
+
 		//클라이언트 설정		
 		memset(&perIoData->overlapped, 0, sizeof(OVERLAPPED));
 		perIoData->wsaBuf.len = 0;
@@ -124,10 +126,10 @@ void IOCPServer::acceptRun()
 
 void IOCPServer::sendWork()
 {
-	
 	Packet* sendPacket;
 	ULONG  isNonBlocking = 1;
 
+	int &count_send = count[c++];
 	while (true)
 	{
 		{
@@ -139,37 +141,52 @@ void IOCPServer::sendWork()
 			m_SendQue.pop();
 		}
 
-		
+
 		//데이터 전송
 		char* sendData = sendPacket->getData();
-		int sendLen = sendPacket->getDataLen();		
+		int sendLen = sendPacket->getDataLen();
 
-		/*IO_DATA	*ioData = new IO_DATA;
+		IO_DATA	*ioData = new IO_DATA;
 		memset(&ioData->overlapped, 0, sizeof(OVERLAPPED));
-		ioData->rwMode = WRITE;
 		ioData->wsaBuf.buf = sendData;
 		ioData->wsaBuf.len = sendLen;
-		
-		WSASend(sendPacket->getSocket(), &(ioData->wsaBuf), 1, &m_SendSize, m_SendFlag, &(ioData->overlapped), NULL);*/
+		ioData->packet = sendPacket;
+		ioData->rwMode = WRITE;
 
-		if (send(sendPacket->getSocket(), sendData, sendLen, 0) <= 0) {
-			//closesocket(sendPacket->getSocket());
+
+		int result = WSASend(sendPacket->getSocket(), &(ioData->wsaBuf), 1, &(ioData->len), 0, &(ioData->overlapped), NULL);
+
+		if (result != 0)
+		{
+			delete ioData->packet;
+			delete ioData;
+			if (result == SOCKET_ERROR)
+			{
+				//closesocket(sendPacket->getSocket());
+			}
+			else {
+				std::cout << result << " error " << std::endl;
+			}
 		}
 
-		delete sendPacket;
+
+		/*if (send(sendPacket->getSocket(), sendData, sendLen, 0) <= 0) {
+
+		}
+		delete sendPacket;*/
+
+
+		count_send++;
 	}
-	
-	
-	
 }
 
 UINT WINAPI IOCPServer::work() {
-	
+
 
 	HANDLE			cp = (HANDLE)m_IOCP;
 	DWORD			bytesTransferred;
 	DWORD			dwFlags = 0;
-	
+
 
 	int dataLen = 0;
 	char* arr = nullptr;
@@ -191,7 +208,7 @@ UINT WINAPI IOCPServer::work() {
 
 
 			//비동기로 데이터를 수신한다.
-			while (true) {				
+			while (true) {
 				len = recv(clientData->hClntSock, buffer, BUFSIZE, 0);
 
 				if (len <= 0) { // 전송끝
@@ -207,18 +224,18 @@ UINT WINAPI IOCPServer::work() {
 					dataLen += len;
 
 					delete tempBuf;
-				}			
+				}
 			}
 
 			//수신 버퍼 초기화
 			delete buffer;
 
 			//데이터 길이가 0이상이면 데이터 수신 성공 
-			if (dataLen>0) {
+			if (dataLen > 0) {
 				//패킷데이터 
-				PacketData *data = new PacketData(arr, dataLen,1);
+				PacketData *data = new PacketData(arr, dataLen, 1);
 
-				Packet *packet = new Packet(clientData->hClntSock, clientData->clntAddr, *data);			
+				Packet *packet = new Packet(clientData->hClntSock, clientData->clntAddr, *data);
 
 				//패킷 처리큐에 전송
 				m_Callback.receivePacket(*packet);
@@ -234,22 +251,23 @@ UINT WINAPI IOCPServer::work() {
 				WSARecv(clientData->hClntSock, &(ioData->wsaBuf), 1, &bytesTransferred, &dwFlags, &(ioData->overlapped), NULL);
 			}
 			//데이터 길이가 0이면 소켓 연결 종료
-			else 
-			{				
+			else
+			{
 				m_Callback.socketClose(clientData->clntAddr);
 				closesocket(clientData->hClntSock);
 
 				delete clientData;
-				delete ioData;
+				delete &ioData->overlapped;
 				continue;
-
 			}
 		}
-		if (ioData->rwMode == WRITE)
+		else if (ioData->rwMode == WRITE)
 		{
+
+			delete ioData->packet;
 			delete ioData;
 		}
-		
+
 	}
 	return 0;
 }
@@ -257,16 +275,68 @@ UINT WINAPI IOCPServer::work() {
 void IOCPServer::sendData(Packet& packet) {
 	// 전송큐에 push 및 송신 이밴트
 	{
-		std::lock_guard<std::mutex> lock(m_Mutex_SendQue);	
+		std::lock_guard<std::mutex> lock(m_Mutex_SendQue);
 		m_SendQue.push(&packet);
-		m_CV_SendQue.notify_all();
-		//
+		m_CV_SendQue.notify_one();
 	}
 }
+
+void IOCPServer::sendData(SOCKET* _targetList, int _listSize, char* _data, int _dataSize)
+{
+	PacketData *send_data = new PacketData(_data, _dataSize, _listSize);
+
+	for (int i = 0; i < _listSize; i++)
+	{
+		Packet *sendPacket = new Packet(_targetList[i], *send_data);
+		{
+			std::lock_guard<std::mutex> lock(m_Mutex_SendQue);
+			m_SendQue.push(sendPacket);
+			m_CV_SendQue.notify_one();
+		}
+	}
+}
+void IOCPServer::sendData(SOCKET _target, char* _data, int _dataSize)
+{
+	PacketData *send_data = new PacketData(_data, _dataSize, 1);
+
+	Packet *sendPacket = new Packet(_target, *send_data);
+	{
+		std::lock_guard<std::mutex> lock(m_Mutex_SendQue);
+		m_SendQue.push(sendPacket);
+		m_CV_SendQue.notify_one();
+	}
+}
+
+
+
 
 
 
 int IOCPServer::getSendQueueSize()
 {
 	return m_SendQue.size();
+}
+
+int IOCPServer::getBufferFilledQueSize()
+{
+	return -1;
+}
+
+int IOCPServer::getCount()
+{
+	int result = 0;
+	for (int i = 0; i < 8; i++)
+	{
+		result += count[i];
+	}
+
+	return result;
+}
+
+void IOCPServer::setCount()
+{
+	for (int i = 0; i < 8; i++)
+	{
+		count[i] = 0;
+	}
 }

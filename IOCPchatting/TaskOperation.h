@@ -84,7 +84,8 @@ private:
 	static unsigned int __stdcall messageThread(void* taskOperation);
 	void messageRun();
 
-
+	static unsigned int __stdcall timerThread(void* taskOperation);
+	void timerRun();
 	
 };
 

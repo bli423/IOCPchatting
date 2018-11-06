@@ -28,7 +28,7 @@ void TaskOperation::Run() {
 	{
 		_beginthreadex(NULL, 0, messageThread, (void*)this, 0, NULL);
 	}
-	
+	_beginthreadex(NULL, 0, timerThread, (void*)this, 0, NULL);
 	dbThread->Run();
 }
 
@@ -53,7 +53,22 @@ void TaskOperation::socketClose(SOCKADDR_IN& _client)
 		m_UserTable.removeUser(*user);
 	}
 }
+unsigned int __stdcall TaskOperation::timerThread(void* taskOperation)
+{
+	TaskOperation* this_taskOperation = static_cast<TaskOperation*>(taskOperation);
+	this_taskOperation->timerRun();
+	return 0;
+}
 
+void TaskOperation::timerRun()
+{
+	while (true)
+	{
+		Sleep(100);
+
+		m_UserTable.sendChats();
+	}
+}
 
 
 // 패킷의 길이 검사하는 스래드
@@ -201,10 +216,8 @@ void TaskOperation::messageRun() {
 			memcpy(connect_answer->id, userid.c_str(), USERID_LEN);	
 			connect_answer->canLogin = canLogin;
 
-		
-			Packet *sendPacket = new Packet(user->getSocket(), user->getClientAddr(), data, totalLen);
-			iocp->sendData(*sendPacket);
-		
+	
+			iocp->sendData(user->getSocket(), data, totalLen);
 		}
 
 		//유저 연결 종료및 삭제
@@ -224,16 +237,14 @@ void TaskOperation::messageRun() {
 			if (user == NULL)
 			{
 				close_answer->canLogout = false;
-
-				Packet *sendPacket = new Packet(packet->getSocket(), packet->getClientAddr(), data, totalLen);
-				iocp->sendData(*sendPacket);
+			
+				iocp->sendData(packet->getSocket(), data, totalLen);
 			}
 			else 
 			{
 				close_answer->canLogout = true;
 
-				Packet *sendPacket = new Packet(packet->getSocket(), packet->getClientAddr(), data, totalLen);
-				iocp->sendData(*sendPacket);
+				iocp->sendData(packet->getSocket(), data, totalLen);
 			}
 
 					
@@ -275,9 +286,7 @@ void TaskOperation::messageRun() {
 				enter_room_answer->roomid = roomid;
 				enter_room_answer->canEnter = isEnter;
 				
-				//m_UserTable.sendMessageToUser(*user, data, totalLen);			
-				Packet *sendPacket = new Packet(user->getSocket(), user->getClientAddr(), data, totalLen);
-				iocp->sendData(*sendPacket);
+				iocp->sendData(user->getSocket(), data, totalLen);
 			}
 			else {///입장 거부
 				WORD totalLen = sizeof(C_ENTER_ROOM_Header_Answer);
@@ -290,8 +299,7 @@ void TaskOperation::messageRun() {
 				enter_room_answer->roomid = roomid;
 				enter_room_answer->canEnter = isEnter;			
 
-				Packet *sendPacket = new Packet(user->getSocket(), user->getClientAddr(), data, totalLen);
-				iocp->sendData(*sendPacket);
+				iocp->sendData(user->getSocket(), data, totalLen);
 			}	
 
 			//user 접근 반환
@@ -325,28 +333,17 @@ void TaskOperation::messageRun() {
 				{
 					exit_room_answer->canEexit = true;
 
-					int size;
-					SOCKET* list = m_UserTable.getUserListInRoom(*user, &size);
-
-					PacketData *send_data = new PacketData(data, totalLen, size);
-
-					for (int i = 0; i < size; i++)
-					{
-						Packet *packet = new Packet(list[i], *send_data);
-						iocp->sendData(*packet);
-					}
-
+					int listSize;
+					SOCKET* list = m_UserTable.getUserListInRoom(*user, &listSize);
+					iocp->sendData(list, listSize, data, totalLen);
 					delete list;
-					//m_UserTable.sendMessageToAllRoomUser(*user, data, totalLen);
 
 					m_UserTable.eixtUserToRoom(*user);
 				}
 				else
 				{
 					exit_room_answer->canEexit = false;
-					//m_UserTable.sendMessageToUser(*user, data, totalLen);
-					Packet *sendPacket = new Packet(user->getSocket(), user->getClientAddr(), data, totalLen);
-					iocp->sendData(*sendPacket);
+					iocp->sendData(user->getSocket(), data, totalLen);
 				}
 			}			
 
@@ -375,28 +372,13 @@ void TaskOperation::messageRun() {
 				message_send->protocol = C_MESSAGE;
 				memcpy(message_send->id, userid.c_str(), USERID_LEN);
 				message_send->messageLen = message_len;
-
 				memcpy(&data[sizeof(C_MESSAGE_Header)], &packet->getData()[sizeof(C_MESSAGE_Header)], message_len);
 
+				m_UserTable.addChats(user->getmRoomID(), data, totalLen);
+
+				//DB에 로그 저장
 				string *message = new string(&packet->getData()[sizeof(C_MESSAGE_Header)], message_len);
-
-				//DB에 메세지 저장
 				dbThread->addMessage(userid, user->getmRoomID(), *message);
-
-				m_UserTable.sendMessageToAllRoomUser(*user, data, totalLen);
-
-				int size;
-				SOCKET* list = m_UserTable.getUserListInRoom(*user,&size);
-
-				PacketData *send_data = new PacketData(data, totalLen, size);
-
-				for (int i=0; i< size; i++)
-				{
-					Packet *packet = new Packet(list[i], *send_data);
-					iocp->sendData(*packet);
-				}
-
-				delete list;
 			}
 
 			//user 접근 반환
@@ -435,13 +417,10 @@ void TaskOperation::completeDBJob(string& _requstID, char* _data, int _data_len)
 		receive_roominfo_send->protocol = C_RECEIVE_ROOMINFO;
 		memcpy(receive_roominfo_send->id, user->getID().c_str(), USERID_LEN);
 		receive_roominfo_send->messageLen = _data_len;
-
 		memcpy(&send_data[sizeof(C_RECEIVE_ROOMINFO_Header)], _data, _data_len);
 
 
-		//m_UserTable.sendMessageToUser(*user, send_data, totalLen);
-		Packet *sendPacket = new Packet(user->getSocket(), user->getClientAddr(), send_data, totalLen);
-		iocp->sendData(*sendPacket);
+		iocp->sendData(user->getSocket(), send_data, totalLen);
 	}
 
 	//user 접근 반환

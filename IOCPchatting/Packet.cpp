@@ -12,7 +12,7 @@ PacketData::PacketData(char* _arr, int _len, int _refCount)
 }
 PacketData::~PacketData()
 {
-	
+	delete[]m_arr;
 }
 bool PacketData::dispose()
 {
@@ -20,8 +20,7 @@ bool PacketData::dispose()
 	m_refCount -= 1;
 
 	if (m_refCount <= 0)
-	{
-		delete m_arr;
+	{		
 		return true;
 	}
 	return false;
@@ -36,7 +35,7 @@ Packet::Packet(
 	PacketData& _data) : m_Data(_data)
 {
 	m_Socket = _clientSock;
-	memcpy(&m_ClientAddr,&_clientAddr,sizeof(SOCKADDR_IN));	
+	memcpy(&m_ClientAddr, &_clientAddr, sizeof(SOCKADDR_IN));
 }
 Packet::Packet(
 	SOCKET	 _clientSock,
@@ -44,21 +43,15 @@ Packet::Packet(
 {
 	m_Socket = _clientSock;
 }
-Packet::Packet(
-	SOCKET	 _clientSock,
-	SOCKADDR_IN& _clientAddr,
-	char* _arr,
-	int _len) : m_Data(*(new PacketData(_arr, _len,1)))
-{
-	m_Socket = _clientSock;
-	memcpy(&m_ClientAddr, &_clientAddr, sizeof(SOCKADDR_IN));
-}
 
 
 Packet::~Packet()
 {
-	if(m_Data.dispose()) delete &m_Data;
-	
+	if (m_Data.dispose())
+	{
+		delete &m_Data;
+	}
+		
 }
 
 char* Packet::getData()
@@ -109,17 +102,16 @@ void Packet::merge(Packet& _additionalPacket)
 Packet&	Packet::cutInTwo(int _position)
 {
 	Packet		*cutPacket;
-	
+
 	char	*cutArr = new char[m_Data.m_len - _position];
 	memcpy(cutArr, &m_Data.m_arr[_position], m_Data.m_len - _position);
 
-	PacketData	*cutData = new PacketData(cutArr, m_Data.m_len - _position,1);
+	PacketData	*cutData = new PacketData(cutArr, m_Data.m_len - _position, 1);
 
 	m_Data.m_len = _position;
-	
-	cutPacket = new Packet(m_Socket, m_ClientAddr,*cutData);
+
+	cutPacket = new Packet(m_Socket, m_ClientAddr, *cutData);
 
 	return *cutPacket;
 }
-
 

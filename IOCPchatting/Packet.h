@@ -5,6 +5,7 @@
 #define PACKET_HEADER
 #include <winsock2.h>
 #include <mutex>
+#include <list>
 
 #define READ        4
 #define WRITE       2
@@ -29,7 +30,8 @@
 #define IN_LOBBY		0
 #define IN_ROOM			1
 
-
+class PacketData;
+class Packet;
 
 
 // 소켓 정보를 구조체화
@@ -42,15 +44,19 @@ struct CLIENT_DATA
 // 소켓의 버퍼 정보를 구조체화
 struct IO_DATA
 {
-	OVERLAPPED overlapped;
-	WSABUF     wsaBuf;
-	int        rwMode;
+	OVERLAPPED	overlapped;
+	WSABUF		wsaBuf;
+	Packet		*packet;
+	int			rwMode;
+	DWORD		len;
 };
+
+
 
 class PacketData
 {
 public:
-	PacketData(char* _arr,int _len,int _refCount);
+	PacketData(char* _arr, int _len, int _refCount);
 	~PacketData();
 
 	bool		dispose();
@@ -63,6 +69,7 @@ public:
 };
 
 
+
 class Packet
 {
 public:
@@ -73,11 +80,6 @@ public:
 	Packet(
 		SOCKET	 _clientSock,
 		PacketData& _data);
-	Packet(
-		SOCKET	 _clientSock,
-		SOCKADDR_IN& _clientAddr,
-		char* _arr,
-		int _len);
 	~Packet();
 
 
@@ -98,6 +100,7 @@ private:
 	SOCKADDR_IN			m_ClientAddr;
 	PacketData			&m_Data;
 };
+
 
 #endif
 
