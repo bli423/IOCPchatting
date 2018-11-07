@@ -373,12 +373,12 @@ void TaskOperation::messageRun() {
 				memcpy(message_send->id, userid.c_str(), USERID_LEN);
 				message_send->messageLen = message_len;
 				memcpy(&data[sizeof(C_MESSAGE_Header)], &packet->getData()[sizeof(C_MESSAGE_Header)], message_len);
-
+				
 				m_UserTable.addChats(user->getmRoomID(), data, totalLen);
 
 				//DB에 로그 저장
-				/*string *message = new string(&packet->getData()[sizeof(C_MESSAGE_Header)], message_len);
-				dbThread->addMessage(userid, user->getmRoomID(), *message);*/
+				string *message = new string(&packet->getData()[sizeof(C_MESSAGE_Header)], message_len);
+				dbThread->addMessage(userid, user->getmRoomID(), *message);
 			}
 
 			//user 접근 반환
@@ -418,7 +418,6 @@ void TaskOperation::completeDBJob(string& _requstID, char* _data, int _data_len)
 		memcpy(receive_roominfo_send->id, user->getID().c_str(), USERID_LEN);
 		receive_roominfo_send->messageLen = _data_len;
 		memcpy(&send_data[sizeof(C_RECEIVE_ROOMINFO_Header)], _data, _data_len);
-
 
 		iocp->sendData(user->getSocket(), send_data, totalLen);
 	}

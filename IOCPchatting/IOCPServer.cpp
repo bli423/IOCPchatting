@@ -146,35 +146,10 @@ void IOCPServer::sendWork()
 		char* sendData = sendPacket->getData();
 		int sendLen = sendPacket->getDataLen();
 
-		IO_DATA	*ioData = new IO_DATA;
-		memset(&ioData->overlapped, 0, sizeof(OVERLAPPED));
-		ioData->wsaBuf.buf = sendData;
-		ioData->wsaBuf.len = sendLen;
-		ioData->packet = sendPacket;
-		ioData->len = 0;
-		ioData->rwMode = WRITE;
-
-		SOCKET socket = sendPacket->getSocket();
-		int result = WSASend(sendPacket->getSocket(), &(ioData->wsaBuf), 1, &(ioData->len), 0, &(ioData->overlapped), NULL);
-
-		if (result != 0)
-		{
-			if (result == SOCKET_ERROR)
-			{
-				closesocket(socket);
-				std::lock_guard<std::mutex> lock(test);
-				if (ioData->overlapped.Offset != 0xddddddddL)
-				{
-					delete ioData->packet;
-					delete  ioData;
-				}
-			}
-			else {
-				std::cout << result << " error " << std::endl;
-			}
+		if (send(sendPacket->getSocket(), sendData, sendLen, 0) <= 0) {
+			closesocket(sendPacket->getSocket());
 		}
-
-
+		delete sendPacket;
 
 		count_send++;
 	}
@@ -197,7 +172,6 @@ UINT WINAPI IOCPServer::work() {
 		IO_DATA			*ioData;
 		// 입출력 이벤트 대기
 		GetQueuedCompletionStatus(cp, &bytesTransferred, (LPDWORD)&clientData, (LPOVERLAPPED*)&ioData, INFINITE);
-
 
 		int	rwMode;
 
@@ -287,15 +261,7 @@ UINT WINAPI IOCPServer::work() {
 				
 			}
 		}
-		else if (rwMode == WRITE)
-		{
-			std::lock_guard<std::mutex> lock(test);
-			if (ioData->overlapped.Offset != 0xddddddddL)
-			{
-				delete ioData->packet;
-				delete ioData;
-			}			
-		}
+		
 
 	}
 
