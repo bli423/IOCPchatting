@@ -28,7 +28,7 @@ bool IOCPServer::Init()
 	for (int i = 0; i < systemInfo.dwNumberOfProcessors; i++) {
 		_beginthreadex(NULL, 0, m_WorkThread, (void*)this, 0, NULL);
 	}
-	for (int i = 0; i < systemInfo.dwNumberOfProcessors; i++) {
+	for (int i = 0; i < systemInfo.dwNumberOfProcessors*2; i++) {
 		_beginthreadex(NULL, 0, m_SendThread, (void*)this, 0, NULL);
 	}
 
