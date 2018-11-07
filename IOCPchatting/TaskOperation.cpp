@@ -378,8 +378,8 @@ void TaskOperation::messageRun() {
 				m_UserTable.addChats(user->getmRoomID(), data, totalLen);
 
 				//DB에 로그 저장
-				/*string *message = new string(&packet->getData()[sizeof(C_MESSAGE_Header)], message_len);
-				dbThread->addMessage(userid, user->getmRoomID(), *message);*/
+				string *message = new string(&packet->getData()[sizeof(C_MESSAGE_Header)], message_len);
+				dbThread->addMessage(userid, user->getmRoomID(), *message);
 			}
 
 			//user 접근 반환
