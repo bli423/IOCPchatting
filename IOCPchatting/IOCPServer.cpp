@@ -176,7 +176,7 @@ UINT WINAPI IOCPServer::work() {
 		int	rwMode;
 
 		{
-			std::lock_guard<std::mutex> lock(test);
+			std::lock_guard<std::mutex> lock(syn);
 			if (ioData->len == 0xddddddddL)
 			{
 				rwMode = 0;
@@ -245,7 +245,7 @@ UINT WINAPI IOCPServer::work() {
 			{
 				
 				{
-					std::lock_guard<std::mutex> lock(test);
+					std::lock_guard<std::mutex> lock(syn);
 
 					SOCKET deleteSocket = clientData->hClntSock;
 					if (deleteSocket != 0xddddddddL)
