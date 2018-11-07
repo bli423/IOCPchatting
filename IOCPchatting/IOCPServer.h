@@ -36,6 +36,9 @@ public:
 	static unsigned int __stdcall m_SendThread(void *p_this);
 	void sendWork();
 
+	static unsigned int __stdcall m_DelaySendThread(void *p_this);
+	void delaySendWork();
+
 	void sendData(Packet& packet);
 	void sendData(SOCKET* _targetList, int _listSize, char* _data, int _dataSize);
 	void sendData(SOCKET _target, char* _data, int _dataSize);
@@ -60,6 +63,10 @@ private:
 	std::queue<Packet*>			m_SendQue;
 	std::mutex					m_Mutex_SendQue;
 	std::condition_variable		m_CV_SendQue;
+
+	std::queue<Packet*>			m_DelaySendQue;
+	std::mutex					m_Mutex_DelaySendQue;
+	std::condition_variable		m_CV_DelaySendQue;
 
 	std::mutex					syn;
 	std::mutex					readError;

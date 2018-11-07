@@ -28,8 +28,11 @@ bool IOCPServer::Init()
 	for (int i = 0; i < systemInfo.dwNumberOfProcessors; i++) {
 		_beginthreadex(NULL, 0, m_WorkThread, (void*)this, 0, NULL);
 	}
-	for (int i = 0; i < systemInfo.dwNumberOfProcessors*2; i++) {
+	for (int i = 0; i < systemInfo.dwNumberOfProcessors; i++) {
 		_beginthreadex(NULL, 0, m_SendThread, (void*)this, 0, NULL);
+	}
+	for (int i = 0; i < systemInfo.dwNumberOfProcessors; i++) {
+		_beginthreadex(NULL, 0, m_DelaySendThread, (void*)this, 0, NULL);
 	}
 
 	//서버 listen 소켓 생성
@@ -78,7 +81,15 @@ unsigned int __stdcall IOCPServer::m_SendThread(void *p_this)
 	this_IOCPServer->sendWork();
 
 	return 0;
+} 
+unsigned int __stdcall IOCPServer::m_DelaySendThread(void *p_this)
+{
+	IOCPServer* this_IOCPServer = static_cast<IOCPServer*>(p_this);
+	this_IOCPServer->delaySendWork();
+
+	return 0;
 }
+
 
 void IOCPServer::acceptRun()
 {
@@ -127,9 +138,9 @@ void IOCPServer::acceptRun()
 void IOCPServer::sendWork()
 {
 	Packet* sendPacket;
-	ULONG  isNonBlocking = 1;
 
 	int &count_send = count[c++];
+
 	while (true)
 	{
 		{
@@ -146,13 +157,96 @@ void IOCPServer::sendWork()
 		char* sendData = sendPacket->getData();
 		int sendLen = sendPacket->getDataLen();
 
-		if (send(sendPacket->getSocket(), sendData, sendLen, 0) <= 0) {
-			closesocket(sendPacket->getSocket());
+		int result = send(sendPacket->getSocket(), sendData, sendLen, 0);
+
+		if (result <= 0) {
+			
+			int error = WSAGetLastError();
+
+			if(error == WSAEWOULDBLOCK)
+			{				
+				std::lock_guard<std::mutex> lock(m_Mutex_DelaySendQue);
+				m_DelaySendQue.push(sendPacket);
+				m_CV_DelaySendQue.notify_all();
+			}
+			else
+			{
+				closesocket(sendPacket->getSocket());
+				delete sendPacket;
+			}		
 		}
-		delete sendPacket;
+		else if (result < sendPacket->getDataLen()) 
+		{			
+			///////////////////////////////////////////
+			////    
+			////     패킷이 적게 보내질 경우 
+			////
+			///////////////////////////////////////////
+		}
+		else 
+		{
+			delete sendPacket;
+		}		
 
 		count_send++;
 	}
+}
+
+
+void IOCPServer::delaySendWork()
+{
+	Packet* sendPacket;
+
+	while (true)
+	{
+		{
+			std::unique_lock<std::mutex> lock(m_Mutex_DelaySendQue);
+			while (m_DelaySendQue.empty()) {
+				m_CV_DelaySendQue.wait(lock);
+			}
+			sendPacket = m_DelaySendQue.front();
+			m_DelaySendQue.pop();
+		}
+
+		char* sendData = sendPacket->getData();
+		int sendLen = sendPacket->getDataLen();
+		bool disConnect = true;
+
+		for (int i = 0; i <10; i++)
+		{
+			int result = send(sendPacket->getSocket(), sendData, sendLen, 0);
+			if (result <= 0) 
+			{
+				int error = WSAGetLastError();
+
+				if (error != WSAEWOULDBLOCK)
+				{
+					disConnect = true;
+					break;
+				}
+			}
+			else
+			{
+				disConnect = false;
+				break;
+			}
+			disConnect = true;
+			Sleep(10);
+		}
+
+		///// 지연되는 사용자 연결 제거
+		if (disConnect)
+		{
+			closesocket(sendPacket->getSocket());		
+		}
+		else
+		{
+			std::cout << m_DelaySendQue.size() << "딜레이 " << std::endl;
+		}
+
+		delete sendPacket;
+	}
+	
 }
 
 UINT WINAPI IOCPServer::work() {
@@ -274,7 +368,7 @@ void IOCPServer::sendData(Packet& packet) {
 	{
 		std::lock_guard<std::mutex> lock(m_Mutex_SendQue);
 		m_SendQue.push(&packet);
-		m_CV_SendQue.notify_one();
+		m_CV_SendQue.notify_all();
 	}
 }
 
@@ -288,7 +382,7 @@ void IOCPServer::sendData(SOCKET* _targetList, int _listSize, char* _data, int _
 		{
 			std::lock_guard<std::mutex> lock(m_Mutex_SendQue);
 			m_SendQue.push(sendPacket);
-			m_CV_SendQue.notify_one();
+			m_CV_SendQue.notify_all();
 		}
 	}
 }
@@ -300,7 +394,7 @@ void IOCPServer::sendData(SOCKET _target, char* _data, int _dataSize)
 	{
 		std::lock_guard<std::mutex> lock(m_Mutex_SendQue);
 		m_SendQue.push(sendPacket);
-		m_CV_SendQue.notify_one();
+		m_CV_SendQue.notify_all();
 	}
 }
 

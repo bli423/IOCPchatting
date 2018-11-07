@@ -89,16 +89,17 @@ public:
 	SOCKADDR_IN&		getClientAddr();
 
 	u_int64				getIPandPORT();
-
 	void				merge(Packet& _additionalPacket);
 	Packet&				cutInTwo(int _position);
 
+	int					m_SendPoint;
 
 private:
 
 	SOCKET				m_Socket;
 	SOCKADDR_IN			m_ClientAddr;
 	PacketData			*m_Data;
+	
 };
 
 

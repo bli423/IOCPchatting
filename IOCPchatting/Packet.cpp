@@ -37,6 +37,7 @@ Packet::Packet(
 	m_Socket = _clientSock;
 	memcpy(&m_ClientAddr, &_clientAddr, sizeof(SOCKADDR_IN));
 	m_Data = &_data;
+	m_SendPoint = 0;
 }
 Packet::Packet(
 	SOCKET	 _clientSock,
@@ -45,6 +46,7 @@ Packet::Packet(
 	m_Socket = _clientSock;
 	memset(&m_ClientAddr, 0, sizeof(SOCKADDR_IN));
 	m_Data = &_data;
+	m_SendPoint = 0;
 }
 
 
