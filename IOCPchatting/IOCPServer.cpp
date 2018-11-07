@@ -154,18 +154,19 @@ void IOCPServer::sendWork()
 		ioData->len = 0;
 		ioData->rwMode = WRITE;
 
-
+		SOCKET socket = sendPacket->getSocket();
 		int result = WSASend(sendPacket->getSocket(), &(ioData->wsaBuf), 1, &(ioData->len), 0, &(ioData->overlapped), NULL);
 
 		if (result != 0)
 		{
 			if (result == SOCKET_ERROR)
 			{
+				closesocket(socket);
 				std::lock_guard<std::mutex> lock(test);
-				if (ioData->overlapped.Offset == 0)
+				if (ioData->overlapped.Offset != 0xddddddddL)
 				{
 					delete ioData->packet;
-					delete ioData;
+					delete  ioData;
 				}
 			}
 			else {
@@ -177,8 +178,6 @@ void IOCPServer::sendWork()
 
 		count_send++;
 	}
-
-	std::cout <<  " sendWork " << std::endl;
 }
 
 UINT WINAPI IOCPServer::work() {
@@ -199,10 +198,24 @@ UINT WINAPI IOCPServer::work() {
 		// 입출력 이벤트 대기
 		GetQueuedCompletionStatus(cp, &bytesTransferred, (LPDWORD)&clientData, (LPOVERLAPPED*)&ioData, INFINITE);
 
-		if (ioData == nullptr) 
-			continue;
 
-		if (ioData->rwMode == READ) {
+		int	rwMode;
+
+		{
+			std::lock_guard<std::mutex> lock(test);
+			if (ioData->len == 0xddddddddL)
+			{
+				rwMode = 0;
+			}
+			else
+			{
+				rwMode = ioData->rwMode;
+			}			
+		}
+		
+			
+
+		if (rwMode == READ) {
 			arr = nullptr;
 
 
@@ -265,23 +278,19 @@ UINT WINAPI IOCPServer::work() {
 					{
 						m_Callback.socketClose(clientData->clntAddr);
 						delete clientData;						
-
-						closesocket(deleteSocket);						
-					}
-					if (ioData->overlapped.Offset == 0L)
-					{
 						delete ioData;
-					}					
+						closesocket(deleteSocket);						
+					}										
 
 					continue;
 				}
 				
 			}
 		}
-		else if (ioData->rwMode == WRITE)
+		else if (rwMode == WRITE)
 		{
 			std::lock_guard<std::mutex> lock(test);
-			if (ioData->overlapped.Offset == 0)
+			if (ioData->overlapped.Offset != 0xddddddddL)
 			{
 				delete ioData->packet;
 				delete ioData;

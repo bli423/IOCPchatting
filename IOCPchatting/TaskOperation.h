@@ -74,6 +74,7 @@ private:
 	std::mutex					m_Mutex_MessageBuf;
 	std::condition_variable		m_CV_MessageBuf;
 
+
 	std::map<u_int64, Packet*>	m_PacketBuffer;
 	
 	UserTable		m_UserTable;
